@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "ignorePatterns": ["dist"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "no-console": "error",
+    "no-debugger": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "react/set-state-in-effect": "off",
+    "react/immutability": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/auth/AuthProvider.tsx", "src/workspace/WorkspaceProvider.tsx", "test/**"],
+      "rules": { "react/only-export-components": "off", "no-console": "off" }
+    },
+    {
+      "files": ["supabase/functions/**"],
+      "rules": { "no-console": "off" }
+    }
+  ]
+}

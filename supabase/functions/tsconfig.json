@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "paths": { "@supabase/supabase-js": ["../../node_modules/@supabase/supabase-js/dist/index.d.mts"] }
+  },
+  "include": ["deno-shim.d.ts", "*/index.ts", "_shared/*.ts"]
+}
