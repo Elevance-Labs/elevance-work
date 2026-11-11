@@ -54,7 +54,7 @@ check('…and in the meeting’s title, every word', JSON.stringify(cards()) ===
 await typeInto('Search notes', 'nothing like this')
 check('…saying so when nothing matches', text().includes('No notes match'))
 await click(button('Clear'))
-check('clearing brings them all back', cards().length === 3 && location.search === '')
+check('clearing brings them all back', await waitFor(() => cards().length === 3 && location.search === ''), location.search)
 
 await chooseLabelled('Label', 'Ideas')
 check('filter by a label', JSON.stringify(cards()) === '["nt-launch"]', JSON.stringify(cards()))
