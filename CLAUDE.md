@@ -93,8 +93,11 @@ behaviour).
   the address and, with no session, goes to Google with `login_hint` and no
   chooser. The hint is never trusted: binding decides who gets in.
 - **Installable (PWA).** `vite.pwa.ts` (build plugin, no dependency) emits
-  `manifest.webmanifest` and `sw.js`; `src/pwa.ts` registers it and
-  `components/UpdatePrompt` offers a waiting build. The worker caches the
+  `manifest.webmanifest` and `sw.js`; `src/pwa.ts` registers it, keeps the
+  browser's install offer, and `components/UpdatePrompt` offers a waiting build.
+  `components/InstallApp` is the Install button (nav foot beside Collapse;
+  a dismissible banner atop the phone navigation): the browser's dialog where
+  it has one, else steps from `lib/install.ts`; hidden when running installed. The worker caches the
   app's own files only, **never a Supabase response**, and stays inside its
   own folder (sibling apps share the origin). Icons in `public/icons/`.
 - **The built page locks itself down.** CSP is added at build time
@@ -109,7 +112,7 @@ behaviour).
 | `src/pages/home/` | Dashboard, Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
 | `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell, issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/` | Shell, `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (pin; unlink a meeting), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
@@ -190,6 +193,8 @@ behaviour).
 - `projects.ts` — project key format and suggestion.
 - `search.ts` — search matching and order (todos, notes; a few per group),
   the Cmd/Ctrl shortcut test and label.
+- `install.ts` — the device and browser (`detectDevice`), running installed
+  or in a tab (`isStandalone`), the install steps for each (`installGuide`).
 - `notes.ts` — note colours, the notes filter (URL form) and `matchesNote`
   (notes are filtered client-side: a person loads only their own), pinned-first order, meeting labels.
 

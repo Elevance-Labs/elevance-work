@@ -8,6 +8,17 @@ import { JSDOM } from 'jsdom'
 
 type Global = Record<string, unknown>
 
+const screen = { width: 1280, displayMode: 'browser' }
+
+/**
+ * The screen the media queries describe: its width, and whether the page is
+ * a browser tab (`browser`) or the installed app (`standalone`). Read when a
+ * component mounts, so set it before `mountApp`.
+ */
+export function setScreen(next: Partial<typeof screen>) {
+  Object.assign(screen, next)
+}
+
 export function setupDom(url = 'http://localhost/') {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url, pretendToBeVisual: true })
   const w = dom.window as unknown as Global
@@ -33,13 +44,16 @@ export function setupDom(url = 'http://localhost/') {
   }
   g.requestAnimationFrame = w.requestAnimationFrame = (cb: (t: number) => void) => setTimeout(() => cb(Date.now()), 0)
   g.cancelAnimationFrame = w.cancelAnimationFrame = (id: number) => clearTimeout(id)
-  // jsdom has no media queries. Answer min/max-width ones as a 1280px desktop,
-  // so the layout renders its permanent nav drawer.
-  const WIDTH = 1280
+  // jsdom has no media queries. Answer min/max-width ones as a 1280px desktop
+  // (see `setScreen`), so the layout renders its permanent nav drawer, and
+  // display-mode ones as a browser tab.
   w.matchMedia = g.matchMedia = (query: string) => {
     const min = /min-width:\s*([\d.]+)px/.exec(query)
     const max = /max-width:\s*([\d.]+)px/.exec(query)
-    const matches = (!min || WIDTH >= Number(min[1])) && (!max || WIDTH <= Number(max[1]))
+    const mode = /display-mode:\s*([\w-]+)/.exec(query)
+    const matches = mode
+      ? mode[1] === screen.displayMode
+      : (!min || screen.width >= Number(min[1])) && (!max || screen.width <= Number(max[1]))
     return {
       matches, media: query, onchange: null,
       addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

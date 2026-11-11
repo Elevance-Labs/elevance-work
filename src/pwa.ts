@@ -46,3 +46,71 @@ export function registerServiceWorker(onUpdate: (apply: () => void) => void, ski
     })
     .catch(() => {})
 }
+
+// ---------------------------------------------------------------------------
+// Installing
+// ---------------------------------------------------------------------------
+
+/** Chrome, Edge and Samsung Internet's offer to install the app (not in the DOM typings). */
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<unknown>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+export interface InstallState {
+  /** Installed during this visit (the page itself is still a browser tab). */
+  installed: boolean
+}
+
+let offer: BeforeInstallPromptEvent | null = null
+let state: InstallState = { installed: false }
+const listeners = new Set<() => void>()
+let listening = false
+
+const setState = (next: InstallState) => {
+  state = { ...state, ...next }
+  for (const l of listeners) l()
+}
+
+/**
+ * Keeps the browser's install offer for the Install button, instead of the
+ * browser's own banner. The offer can come as soon as the page loads, so
+ * main.tsx calls this before rendering; calling it again does nothing.
+ */
+export function listenForInstall() {
+  if (listening || typeof window === 'undefined') return
+  listening = true
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault()
+    offer = event as BeforeInstallPromptEvent
+  })
+  window.addEventListener('appinstalled', () => {
+    offer = null
+    setState({ installed: true })
+  })
+}
+
+export const installState = () => state
+export function subscribeInstall(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
+ * Shows the browser's install dialog. An offer can be used once: afterwards
+ * the button falls back to the steps. `null` when there was no offer to use.
+ */
+export async function promptInstall(): Promise<'accepted' | 'dismissed' | null> {
+  const event = offer
+  if (!event) return null
+  offer = null
+  try {
+    await event.prompt()
+    const { outcome } = await event.userChoice
+    return outcome
+  } catch {
+    return null
+  }
+}

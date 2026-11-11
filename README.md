@@ -65,7 +65,13 @@ The grid icon at the top left opens the **app switcher**: Work, Support and Peop
 
 ## Installing it as an app
 
-Elevance Work can be **installed** (a PWA): *Install app* in Chrome or Edge's address bar, or *Add to Home Screen* from Safari's share menu on an iPhone. It then opens in its own window with its own icon.
+Elevance Work can be **installed** (a PWA). It then opens in its own window (or full screen from the home screen) with its own icon.
+
+- **The Install button.** On a computer it sits at the foot of the navigation, beside *Collapse* (an icon above it when the navigation is folded). On a phone or narrow window it leads the navigation as *Get the app*, with an **×** that hides it for good in that browser.
+- **What it does depends on the browser.** Where the browser lets a page ask (Chrome, Edge and Samsung Internet on a computer or Android), it opens the browser's own install dialog. Everywhere else, including every iPhone and iPad and Safari on a Mac, it shows the steps for that device and browser: the share sheet's *Add to Home Screen* on an iPhone, *File → Add to Dock* in Safari on a Mac, the menu path in Chrome or Edge, and "open this in Safari / Chrome first" inside another app's built-in browser. Firefox on a computer cannot install web apps, and says so.
+- **Nothing is offered once you are in the app.** The button is hidden when the page is running installed, and disappears as soon as an install finishes.
+- You can still install by hand: *Install app* in Chrome or Edge's address bar, or *Add to Home Screen* from Safari's share menu.
+- **iPhones open links in Safari, not the app.** iOS has no way for a home-screen app to take over its links, so a link shared in Google Chat opens in Safari (or in Chat's own browser).
 
 - **What is kept on the device** is the app itself (scripts, styles, fonts, icons), so it opens at once. **Nothing from Supabase is ever cached**: every record is fetched each time, and none of it is readable offline. Without a connection the app opens and shows nothing.
 - **A new version waits to be asked.** After a deploy the app says *"A new version is available"* with a **Reload** button. Until you press it, or close every window of the app, you keep the build you started with.
