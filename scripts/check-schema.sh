@@ -34,8 +34,11 @@ for f in supabase/migrations/*.sql; do
 done
 psql -d from_schema -f supabase/schema.sql
 
-pg_dump -s from_migrations > "$tmp/from_migrations.sql"
-pg_dump -s from_schema > "$tmp/from_schema.sql"
+# Newer pg_dump (17.6+, 18) wraps each dump in \restrict / \unrestrict with a
+# random key, different every run; it says nothing about the schema.
+for db in from_migrations from_schema; do
+  pg_dump -s "$db" | grep -vE '^\\(un)?restrict ' > "$tmp/$db.sql"
+done
 
 if diff -u "$tmp/from_migrations.sql" "$tmp/from_schema.sql"; then
   echo "check-schema: schema.sql matches the migrations."
