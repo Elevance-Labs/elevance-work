@@ -33,6 +33,7 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useMe } from '../../auth/AuthProvider'
+import { useNotifications } from '../../workspace/notifications'
 import { supabase } from '../../lib/supabase'
 import { assignable, can, roleIn } from '../../lib/permissions'
 import { errorMessage, formatDayTime, timeAgo } from '../../lib/constants'
@@ -149,6 +150,11 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   }, [reload])
 
   const issue = data?.issue
+  // Having looked at an issue is what reading its notifications means.
+  const { markIssueRead } = useNotifications()
+  useEffect(() => {
+    if (issue?.id) markIssueRead(issue.id)
+  }, [issue?.id, markIssueRead])
   const project = projectById(issue?.project_id)
   const meta = useProjectMeta(issue?.project_id)
   const role = roleOf(issue?.project_id)

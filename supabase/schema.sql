@@ -22,7 +22,7 @@ create type public.link_kind as enum ('blocks', 'relates', 'duplicates', 'clones
 create type public.doc_type as enum
   ('document', 'spreadsheet', 'presentation', 'form', 'drawing', 'folder', 'file');
 create type public.notification_kind as enum
-  ('assigned', 'mentioned', 'commented', 'status_changed');
+  ('assigned', 'mentioned', 'commented', 'status_changed', 'test');
 create type public.note_color as enum
   ('yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'gray', 'white');
 create type public.dev_link_kind as enum ('branch', 'commit', 'pull_request');
@@ -1073,25 +1073,52 @@ create table public.notifications (
 );
 create index notifications_recipient_idx on public.notifications (recipient_id, created_at desc);
 
--- One in-app notification, unless it would go to the person who caused it,
--- to someone inactive, or to someone who can't see the issue.
-create function public.notify_person(
-  p_recipient uuid, p_kind public.notification_kind, p_issue uuid,
+-- The devices someone turned notifications on for (Web Push). Written only
+-- through save_push_subscription(); the owner reads and removes their own,
+-- never the keys. Dropped when they are deactivated.
+create table public.push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  profile_id   uuid not null references public.profiles (id) on delete cascade,
+  -- The push service's address for this browser on this device. Unique: one
+  -- device, one owner.
+  endpoint     text not null unique check (endpoint ~ '^https://' and length(endpoint) < 2048),
+  -- The browser's public key and auth secret (base64url) that each payload is
+  -- encrypted to (RFC 8291). Only push-send reads them.
+  p256dh       text not null check (length(p256dh) between 80 and 100),
+  auth         text not null check (length(auth) between 16 and 32),
+  -- "Chrome on Android": how a person tells their devices apart.
+  device       text,
+  created_at   timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create index push_subscriptions_profile_idx on public.push_subscriptions (profile_id);
+
+-- The notifications one save causes: one per person, in a single statement,
+-- so notifications_push makes one call to push-send for the save however many
+-- people it reaches. Someone with several reasons gets the first of: assigned,
+-- mentioned, status changed, commented. `p_detail` is the status the save moved
+-- the issue to, if it did, on every row, so "assigned" can also say where it
+-- went. Skipped: nobody, whoever caused it, someone inactive, someone who
+-- can't see the issue.
+create function public.notify_people(
+  p_recipients uuid[], p_kinds public.notification_kind[], p_issue uuid,
   p_comment uuid default null, p_detail text default null)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
-  v_actor uuid := public.current_profile_id();
+  v_actor   uuid := public.current_profile_id();
+  v_project uuid := (select project_id from public.issues where id = p_issue);
 begin
-  if p_recipient is null or p_recipient is not distinct from v_actor
-     or not exists (select 1 from public.profiles where id = p_recipient and active) then
-    return;
-  end if;
-  if p_issue is not null and public.role_in_project(
-       p_recipient, (select project_id from public.issues where id = p_issue)) is null then
+  if coalesce(cardinality(p_recipients), 0) = 0 then
     return;
   end if;
   insert into public.notifications (recipient_id, actor_id, kind, issue_id, comment_id, detail)
-  values (p_recipient, v_actor, p_kind, p_issue, p_comment, p_detail);
+  select distinct on (t.r) t.r, v_actor, t.k, p_issue, p_comment, p_detail
+    from unnest(p_recipients, p_kinds) as t(r, k)
+    join public.profiles p on p.id = t.r and p.active
+   where t.r is distinct from v_actor
+     and t.k is not null
+     and public.role_in_project(t.r, v_project) is not null
+   order by t.r, case t.k when 'assigned' then 1 when 'mentioned' then 2 when 'status_changed' then 3 else 4 end;
 end;
 $$;
 
@@ -1154,6 +1181,92 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Notifications on devices (Web Push), through the push-send function
+-- ---------------------------------------------------------------------------
+
+-- Turning this device on (`p_refresh_only` false) makes it the caller's, even
+-- if somebody else turned it on before: a shared machine must not carry the
+-- last person's notifications to the next.
+--
+-- Checking it (`p_refresh_only` true, whenever the app looks) never registers
+-- anything. If the device is the caller's its keys are refreshed; if it is
+-- somebody else's, that registration ends (they are no longer the one using
+-- this browser); if there is none (removed on another device, or dropped by
+-- push-send as gone) it stays gone.
+--
+-- Returns whether this device now gets the caller's notifications: what the
+-- app shows as on or off.
+create function public.save_push_subscription(
+  p_endpoint text, p_p256dh text, p_auth text, p_device text default null,
+  p_refresh_only boolean default false)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  v_me    uuid := public.current_profile_id();
+  v_owner uuid;
+begin
+  if v_me is null then
+    raise exception 'Sign in first.' using errcode = '42501';
+  end if;
+
+  if p_refresh_only then
+    select profile_id into v_owner from public.push_subscriptions where endpoint = p_endpoint;
+    if v_owner is null then
+      return false;
+    end if;
+    if v_owner <> v_me then
+      delete from public.push_subscriptions where endpoint = p_endpoint;
+      return false;
+    end if;
+    update public.push_subscriptions
+       set p256dh = p_p256dh, auth = p_auth, device = coalesce(left(p_device, 80), device)
+     where endpoint = p_endpoint;
+    return true;
+  end if;
+
+  insert into public.push_subscriptions (profile_id, endpoint, p256dh, auth, device)
+  values (v_me, p_endpoint, p_p256dh, p_auth, left(p_device, 80))
+  on conflict (endpoint) do update
+    set profile_id = excluded.profile_id, p256dh = excluded.p256dh, auth = excluded.auth,
+        device = excluded.device, created_at = now(), last_used_at = null;
+  return true;
+end;
+$$;
+
+-- The one notification a person can cause directly, to themselves: proves the
+-- whole path (row, trigger, push-send, the device).
+create function public.send_test_notification()
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_me uuid := public.current_profile_id();
+begin
+  if v_me is null then
+    raise exception 'Sign in first.' using errcode = '42501';
+  end if;
+  insert into public.notifications (recipient_id, kind) values (v_me, 'test');
+end;
+$$;
+
+-- One call to push-send per statement that writes notifications, with the
+-- new rows' ids; push-send reads everything else itself.
+create function public.notifications_push()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_ids uuid[];
+begin
+  select array_agg(id) into v_ids from inserted;
+  if v_ids is not null then
+    perform public.call_function('push-send', jsonb_build_object('notification_ids', to_jsonb(v_ids)));
+  end if;
+  return null;
+end;
+$$;
+
+create trigger notifications_push
+  after insert on public.notifications
+  referencing new table as inserted
+  for each statement execute function public.notifications_push();
+
+-- ---------------------------------------------------------------------------
 -- After-write triggers: history, watchers, notifications, Chat, Calendar
 -- ---------------------------------------------------------------------------
 create function public.log_issue_event(
@@ -1171,6 +1284,9 @@ declare
   v_status text;
   w        uuid;
   v_event  uuid;
+  -- Who this save notifies, gathered and written at the end in one go.
+  v_to     uuid[] := '{}';
+  v_kinds  public.notification_kind[] := '{}';
 begin
   -- Rows touched while their project is being deleted: nothing to record.
   if not exists (select 1 from public.projects where id = new.project_id) then
@@ -1187,11 +1303,12 @@ begin
   if tg_op = 'INSERT' then
     perform public.log_issue_event(new.id, new.project_id, 'created', null, new.key);
     if new.assignee_id is not null then
-      perform public.notify_person(new.assignee_id, 'assigned', new.id);
+      v_to := v_to || new.assignee_id; v_kinds := v_kinds || 'assigned'::public.notification_kind;
     end if;
     foreach w in array public.mentioned_ids(new.description) loop
-      perform public.notify_person(w, 'mentioned', new.id);
+      v_to := v_to || w; v_kinds := v_kinds || 'mentioned'::public.notification_kind;
     end loop;
+    perform public.notify_people(v_to, v_kinds, new.id);
     perform public.chat_notify(new.project_id, 'issue_created', jsonb_build_object('issue_id', new.id));
     return null;
   end if;
@@ -1204,7 +1321,7 @@ begin
             old.status_id, new.status_id)
     returning id into v_event;
     for w in select profile_id from public.issue_watchers where issue_id = new.id loop
-      perform public.notify_person(w, 'status_changed', new.id, null, v_status);
+      v_to := v_to || w; v_kinds := v_kinds || 'status_changed'::public.notification_kind;
     end loop;
     perform public.chat_notify(new.project_id, 'status_changed', jsonb_build_object('issue_event_id', v_event));
   end if;
@@ -1213,7 +1330,7 @@ begin
       (select full_name from public.profiles where id = old.assignee_id),
       (select full_name from public.profiles where id = new.assignee_id), old.assignee_id, new.assignee_id);
     if new.assignee_id is not null then
-      perform public.notify_person(new.assignee_id, 'assigned', new.id);
+      v_to := v_to || new.assignee_id; v_kinds := v_kinds || 'assigned'::public.notification_kind;
       perform public.chat_notify(new.project_id, 'issue_assigned', jsonb_build_object('issue_id', new.id));
     end if;
   end if;
@@ -1263,10 +1380,11 @@ begin
     perform public.log_issue_event(new.id, new.project_id, 'description', null, null);
     foreach w in array public.mentioned_ids(new.description) loop
       if not (w = any (public.mentioned_ids(old.description))) then
-        perform public.notify_person(w, 'mentioned', new.id);
+        v_to := v_to || w; v_kinds := v_kinds || 'mentioned'::public.notification_kind;
       end if;
     end loop;
   end if;
+  perform public.notify_people(v_to, v_kinds, new.id, null, v_status);
   return null;
 end;
 $$;
@@ -1300,33 +1418,34 @@ create function public.comments_after_write()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   v_mentioned uuid[] := public.mentioned_ids(new.body);
-  w           uuid;
+  v_new       uuid[];
+  v_watchers  uuid[];
 begin
   if tg_op = 'UPDATE' then
-    foreach w in array v_mentioned loop
-      if not (w = any (public.mentioned_ids(old.body))) then
-        perform public.notify_person(w, 'mentioned', new.issue_id, new.id);
-      end if;
-    end loop;
+    -- Only the people newly mentioned by the edit.
+    select coalesce(array_agg(m), '{}') into v_new
+      from unnest(v_mentioned) m where not (m = any (public.mentioned_ids(old.body)));
+    perform public.notify_people(v_new, array_fill('mentioned'::public.notification_kind, array[cardinality(v_new)]),
+                                 new.issue_id, new.id);
     return null;
   end if;
 
   if new.author_id is not null then
     insert into public.issue_watchers values (new.issue_id, new.author_id) on conflict do nothing;
   end if;
-  foreach w in array v_mentioned loop
-    perform public.notify_person(w, 'mentioned', new.issue_id, new.id);
-  end loop;
-  for w in select profile_id from public.issue_watchers
-            where issue_id = new.issue_id and not (profile_id = any (v_mentioned)) loop
-    perform public.notify_person(w, 'commented', new.issue_id, new.id);
-  end loop;
+  -- A watcher who is also mentioned is told once, as mentioned.
+  select coalesce(array_agg(profile_id), '{}') into v_watchers
+    from public.issue_watchers where issue_id = new.issue_id and not (profile_id = any (v_mentioned));
+  perform public.notify_people(
+    v_mentioned || v_watchers,
+    array_fill('mentioned'::public.notification_kind, array[cardinality(v_mentioned)])
+      || array_fill('commented'::public.notification_kind, array[cardinality(v_watchers)]),
+    new.issue_id, new.id);
   perform public.chat_notify((select project_id from public.issues where id = new.issue_id),
                              'comment_added', jsonb_build_object('comment_id', new.id));
   return null;
 end;
 $$;
-
 create trigger comments_after_write
   after insert or update on public.comments
   for each row execute function public.comments_after_write();
@@ -1498,6 +1617,20 @@ create trigger profiles_drop_calendar
   after update of active on public.profiles
   for each row when (old.active and not new.active)
   execute function public.profiles_drop_calendar();
+
+-- Deactivating someone drops their devices.
+create function public.profiles_drop_push()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.push_subscriptions where profile_id = new.id;
+  return new;
+end;
+$$;
+
+create trigger profiles_drop_push
+  after update of active on public.profiles
+  for each row when (old.active and not new.active)
+  execute function public.profiles_drop_push();
 
 -- Sprints: start and complete are the only state changes.
 create function public.sprint_start(
@@ -1696,6 +1829,10 @@ grant update (title, body, color, label_ids, project_id, pinned, meeting_id, mee
 grant select, delete on public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
 
+-- Written only by save_push_subscription(); the keys are never read back.
+grant select (id, profile_id, endpoint, device, created_at, last_used_at), delete
+  on public.push_subscriptions to authenticated;
+
 -- RLS helpers (evaluated as the caller) and the RPCs the app calls.
 grant execute on function
   public.current_profile_id(), public.is_admin(), public.project_role_of(uuid),
@@ -1704,7 +1841,8 @@ grant execute on function
   public.bind_profile(), public.project_create(text, text, public.project_kind, public.project_visibility, text),
   public.project_statuses_reorder(uuid, uuid[]), public.fields_reorder(uuid, uuid[]),
   public.project_rerank(uuid), public.sprint_start(uuid, date, date, text, text),
-  public.sprint_complete(uuid, uuid), public.todo_leave(uuid)
+  public.sprint_complete(uuid, uuid), public.todo_leave(uuid),
+  public.save_push_subscription(text, text, text, text, boolean), public.send_test_notification()
   to authenticated;
 
 grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;
@@ -1738,6 +1876,7 @@ alter table public.notes enable row level security;
 -- No policies: only the google-calendar function (service role) touches it.
 alter table public.calendar_connections enable row level security;
 alter table public.notifications enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 -- People: everyone signed in sees the directory; admins manage it; you may
 -- rename yourself (the guard keeps role, email and access admin-only).
@@ -1933,6 +2072,11 @@ create policy notifications_update on public.notifications for update to authent
   with check (recipient_id = (select public.current_profile_id()));
 create policy notifications_delete on public.notifications for delete to authenticated
   using (recipient_id = (select public.current_profile_id()));
+
+create policy push_subscriptions_select on public.push_subscriptions for select to authenticated
+  using (profile_id = (select public.current_profile_id()));
+create policy push_subscriptions_delete on public.push_subscriptions for delete to authenticated
+  using (profile_id = (select public.current_profile_id()));
 
 -- ---------------------------------------------------------------------------
 -- Realtime: the bell and the boards update live (RLS still applies).

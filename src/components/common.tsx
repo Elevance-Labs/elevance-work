@@ -12,6 +12,7 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  LinearProgress,
   Stack,
   Tooltip,
   Typography,
@@ -20,14 +21,26 @@ import {
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import CloseIcon from '@mui/icons-material/Close'
-import WorkspacesIcon from '@mui/icons-material/Workspaces'
+import { WorkIcon } from './ElevanceIcons'
 import type { Profile } from '../lib/types'
 
 export function Logo({ size = 32 }: { size?: number }) {
   return (
     <Avatar variant="rounded" sx={{ width: size, height: size, bgcolor: 'primary.main' }}>
-      <WorkspacesIcon sx={{ fontSize: size * 0.62 }} />
+      <WorkIcon sx={{ fontSize: size * 0.62 }} />
     </Avatar>
+  )
+}
+
+/** The first load: the app's icon, centred, with a bar running beneath it. */
+export function Splash() {
+  return (
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Stack spacing={3} sx={{ alignItems: 'center' }}>
+        <Logo size={72} />
+        <LinearProgress aria-label="Loading" sx={{ width: 160, borderRadius: 1 }} />
+      </Stack>
+    </Box>
   )
 }
 

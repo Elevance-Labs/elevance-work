@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p supabase/functions",
     "test": "status=0; for f in test/*.test.*; do echo \"--- $f\"; TZ=America/Los_Angeles vite-node --config test/vite.config.ts \"$f\" || status=1; done; exit $status",
     "check:schema": "bash scripts/check-schema.sh",
-    "test:sql": "bash scripts/test-sql.sh"
+    "test:sql": "bash scripts/test-sql.sh",
+    "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

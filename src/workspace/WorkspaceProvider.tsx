@@ -3,10 +3,11 @@
 // memberships, and the active sprints. Loaded after sign-in; pages call
 // `reload()` after changing any of it.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Alert, Box, Button, CircularProgress } from '@mui/material'
+import { Alert, Box, Button } from '@mui/material'
 import { useMe } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { roleIn } from '../lib/permissions'
+import { Splash } from '../components/common'
 import { statusesOf } from '../lib/issues'
 import type { IssueType, Profile, Project, ProjectMember, ProjectRole, ProjectStatus, Sprint } from '../lib/types'
 
@@ -106,13 +107,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       </Box>
     )
   }
-  if (!value) {
-    return (
-      <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    )
-  }
+  if (!value) return <Splash />
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
 }
 

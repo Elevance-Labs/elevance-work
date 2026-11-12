@@ -38,6 +38,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
           VITE_SUITE_WORK_URL: ${{ vars.VITE_SUITE_WORK_URL }}
           VITE_SUITE_SUPPORT_URL: ${{ vars.VITE_SUITE_SUPPORT_URL }}
           VITE_SUITE_PEOPLE_URL: ${{ vars.VITE_SUITE_PEOPLE_URL }}

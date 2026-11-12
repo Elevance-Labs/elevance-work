@@ -23,7 +23,8 @@ behaviour).
   (private; own labels; pinned to the dashboard; linked to a project and/or
   one Google meeting), **search** (Cmd/Ctrl+S) and **create** (Cmd/Ctrl+K),
   **dashboard** (the meeting now with its note; agenda, todos, issues,
-  pinned notes), **notifications** (in-app, live; Google Chat), **admin**
+  pinned notes), **notifications** (in-app, live; pushed to devices; Google
+  Chat), **admin**
   (people, issue types, workspace).
 - Stack: **React 19 + Vite + MUI + TypeScript** on the front, **Supabase**
   (Postgres + RLS, Auth, Realtime, Edge Functions) behind it.
@@ -49,6 +50,10 @@ behaviour).
   defaults, enforces the hierarchy, sprint, release and assignee rules, checks
   custom values (`issue_custom_clean`) and stamps `resolved_at`.
   `issues_after_write` writes history, watchers, notifications and Chat calls.
+  A save's notifications go through `notify_people`: one statement (one
+  `push-send` call per save), one per person (assigned > mentioned > status
+  changed > commented; the save's new status in `detail`), as in Support.
+  Don't add per-person inserts.
   Client checks are a convenience.
 - **Some state changes only through RPCs.** Projects are created only by
   `project_create`; a sprint's state only by `sprint_start` / `sprint_complete`
@@ -61,7 +66,10 @@ behaviour).
   tokens, used only for their owner's own calendar), `attachments`,
   `projects.drive_folder_id`, `releases.google_event_id`, documents with a `drive_file_id`, and
   `issue_dev_links` (the `github` function; no client write grants). History
-  (`issue_events`), `sprint_issues` and `notifications` only by triggers / RPCs.
+  (`issue_events`), `sprint_issues` and `notifications` only by triggers / RPCs
+  (`send_test_notification` is the one a person causes, to themselves).
+  `push_subscriptions` only through `save_push_subscription` (which also hands
+  a shared browser to whoever turned it on last); clients never read the keys.
 - **Column grants are the write allow-list.** A new column is not writable from
   the app until added to the `grant insert / update (...)` list — and must not be
   if clients mustn't set it.
@@ -85,7 +93,8 @@ behaviour).
   the layout (header: switcher, logo, account button with name and role;
   tinted current page; navigation that folds to a rail from **Collapse** at its
   foot, via `components/useNavCollapsed`, one localStorage key shared by the
-  apps) match Work, Support and People. A change to either belongs in all three.
+  apps; the first load is the app's icon over a running bar, `Splash` in `components/common`)
+  match Work, Support and People. A change to either belongs in all three.
 - **One of three apps.** `lib/suite.ts` lists the suite (Work, Support,
   People), where each lives (the sibling folder, or `VITE_SUITE_*_URL`) and the
   `?sso=<company email>` hand-over; `components/AppSwitcher` is the grid icon
@@ -99,7 +108,10 @@ behaviour).
   a dismissible banner atop the phone navigation): the browser's dialog where
   it has one, else steps from `lib/install.ts`; hidden when running installed. The worker caches the
   app's own files only, **never a Supabase response**, and stays inside its
-  own folder (sibling apps share the origin). Icons in `public/icons/`.
+  own folder (sibling apps share the origin). It also shows pushes (always a
+  notification: Safari revokes silent ones), sets the icon badge, and a tap
+  only ever opens a page of this app. Icons in `public/icons/` (incl.
+  `badge-96.png`, the status-bar silhouette).
 - **The built page locks itself down.** CSP is added at build time
   (`vite.config.ts`); the app refuses to run framed (`main.tsx`). New external
   hosts go in that policy; `script-src` is never widened. No `console` in `src/`.
@@ -112,17 +124,17 @@ behaviour).
 | `src/pages/home/` | Dashboard, Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
 | `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell, `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (pin; unlink a meeting), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
-| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note-changed bus). |
+| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note-changed bus). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
 | `supabase/migrations/` | Ordered, timestamped changes, applied by `supabase db push`. |
 | `supabase/schema.sql` | The **whole current database** in one file. Kept in step with the migrations. |
-| `supabase/functions/` | Edge Functions: `drive`, `google-calendar`, `notify-chat`, `calendar-sync`, `github` (GitHub's webhook; its `parse.ts` is pure and read by the browser tests); `_shared/google.ts`. |
-| `scripts/` | `check-schema.sh`, `test-sql.sh`, `pg-sandbox.sh` (throwaway Postgres). |
+| `supabase/functions/` | Edge Functions: `drive`, `google-calendar`, `notify-chat`, `calendar-sync`, `github` (GitHub's webhook; its `parse.ts` is pure and read by the browser tests), `push-send` (Web Push; `webpush.ts` and `message.ts` are pure and read by the browser tests); `_shared/google.ts`. |
+| `scripts/` | `check-schema.sh`, `test-sql.sh`, `pg-sandbox.sh` (throwaway Postgres), `vapid-keys.mjs`. |
 | `test/` | Browser tests (jsdom + in-memory Supabase mock) and `test/sql/` (database tests). |
 | `.github/workflows/deploy.yml` | Lint, typecheck, tests, SQL tests, schema check, build, deploy. |
 
@@ -141,6 +153,9 @@ behaviour).
   gated by not registering the routes in `src/App.tsx`, and hidden in the nav.
 - `?issue=KEY` on any route opens the issue dialog (lazy, in `Layout`); the
   create dialog is opened through `useLayout().openCreate(defaults)`.
+- The account menu opens **Notifications** (`NotificationSettings`, lazy).
+  `Layout` also follows a tapped device notification (the worker's `open`
+  message): an issue opens over the current page, as from the bell.
 - `Layout` owns the shortcuts: Cmd/Ctrl+S opens search, Cmd/Ctrl+K (like the
   Create button) opens the Create chooser (both lazy); `openCreate` skips it
   for an issue with defaults. Search reads issues per keystroke and your todos, notes
@@ -156,6 +171,7 @@ behaviour).
 | `useProjectMeta(projectId)` | members, fields, sprints, releases; `invalidateProjectMeta` after writes | Per project, cached |
 | `issueEvents` | `emitIssueChange` / `useIssueChanges`: pages reload after the dialogs write | Signed in |
 | `itemEvents` | `emitItemChange` / `useItemChanges` (todo, note): pages reload after Create, a meeting's note or a calendar todo writes | Signed in |
+| `NotificationsProvider` | `useNotifications()`: your latest notifications (Realtime, a push arriving, back to the front), unread count + app-icon badge, `markRead` / `markIssueRead` (the issue view, on open) / `markAllRead`; no-ops outside a provider | Signed in |
 | `projectContext` | `useProject()` → project and your role | Project pages |
 | `layoutContext` | `useLayout().openCreate` | Inside `Layout` |
 
@@ -193,6 +209,14 @@ behaviour).
 - `projects.ts` — project key format and suggestion.
 - `search.ts` — search matching and order (todos, notes; a few per group),
   the Cmd/Ctrl shortcut test and label.
+- `notifications.ts` — what a notification says (`notificationSentence`, a
+  comment's `excerpt`), unread and badge counts. Wording mirrored in
+  `push-send/message.ts`.
+- `push.ts` — whether this device can have device notifications
+  (`pushStatus`: on / off / blocked / install-first on iOS tabs / unsupported /
+  unconfigured; "on" needs the server's confirmation), what the bell offers
+  (`pushPrompt`, incl. *stopped*), VAPID key and subscription shapes, device
+  labels. The browser calls are in `src/pwa.ts`.
 - `install.ts` — the device and browser (`detectDevice`), running installed
   or in a tab (`isStandalone`), the install steps for each (`installGuide`).
 - `notes.ts` — note colours, the notes filter (URL form) and `matchesNote`
@@ -229,7 +253,9 @@ Full detail in `supabase/schema.sql`.
   stamps the owner, keeps only own labels and visible projects, and moves
   `updated_at` only on title / text; `pinned`; a meeting link is a Google event
   id (one note per person per meeting) with its title and day copied in;
-  `notifications` — per recipient, only `read_at` writable.
+  `notifications` — per recipient, only `read_at` writable; kinds include
+  `test`; `push_subscriptions` — a person's devices (endpoint, keys, label),
+  read and removed by their owner (never the keys), dropped on deactivation.
 
 ## 8. How things connect
 
@@ -238,6 +264,12 @@ Full detail in `supabase/schema.sql`.
   notifications, `chat_notify` → pg_net → `notify-chat` → project webhook
   (threadKey = issue key).
 - Comment → `comments_after_write` → watchers, mentions, Chat.
+- Notification row → `notifications_push` (statement trigger) → pg_net →
+  `push-send` (ids only; reads the rest, encrypts per device, VAPID; deletes
+  devices the push service reports gone) → the worker shows it, badges the
+  icon, tells open windows (the bell reloads) → a tap focuses the app and
+  opens the issue, or opens a window. Opening an issue marks its
+  notifications read.
 - Your Google Calendar: Google sign-in asks the read-only calendar scope offline
   (`CALENDAR_SIGN_IN`; the calendar's and dashboard's Connect is the fallback) → back in `AuthProvider` (`takeCalendarGrant`) → next read
   hands the refresh token to `google-calendar` (`connect`: must be your own
@@ -274,8 +306,11 @@ Full detail in `supabase/schema.sql`.
 - SQL tests (`test/sql/`): each file runs on a fresh copy of `_fixtures.sql`;
   `t.login(name)` acts as that person under `authenticated`; assertions in
   `_helpers.sql`. Vault and pg_net are stubbed (`net.calls` records calls).
-- Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (`.env.example`); function
-  secrets and Vault secrets in `README.md`.
+- Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, optional
+  `VITE_VAPID_PUBLIC_KEY` (device notifications; `yarn vapid-keys` makes the
+  pair) (`.env.example`); function secrets and Vault secrets in `README.md`.
+  The browser tests build with a VAPID key; jsdom has no Web Push, so only
+  `test/push.test.tsx`, which installs a fake one, sees device notifications.
 
 ## 10. Changing the database
 

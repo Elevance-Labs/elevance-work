@@ -12,11 +12,11 @@
   },
   "overrides": [
     {
-      "files": ["src/auth/AuthProvider.tsx", "src/workspace/WorkspaceProvider.tsx", "test/**"],
+      "files": ["src/auth/AuthProvider.tsx", "src/workspace/WorkspaceProvider.tsx", "src/workspace/notifications.tsx", "test/**"],
       "rules": { "react/only-export-components": "off", "no-console": "off" }
     },
     {
-      "files": ["supabase/functions/**"],
+      "files": ["supabase/functions/**", "scripts/**"],
       "rules": { "no-console": "off" }
     }
   ]

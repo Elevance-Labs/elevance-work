@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactElement } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AppBar,
   Box,
@@ -32,6 +32,7 @@ import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined'
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuIcon from '@mui/icons-material/Menu'
+import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutlined'
@@ -47,6 +48,7 @@ import { Logo, PersonAvatar } from './common'
 import { InstallBanner, InstallNavButton } from './InstallApp'
 import { ProjectAvatar } from './IssueBits'
 import NotificationsBell from './NotificationsBell'
+import { onWorkerMessage, routerPath } from '../pwa'
 import type { CreateDefaults } from './CreateIssueDialog'
 import { LayoutContext, type LayoutActions } from './layoutContext'
 
@@ -56,6 +58,7 @@ const IssueDialog = lazy(() => import('./IssueDialog'))
 const CreateIssueDialog = lazy(() => import('./CreateIssueDialog'))
 const SearchDialog = lazy(() => import('./SearchDialog'))
 const CreateMenu = lazy(() => import('./CreateMenu'))
+const NotificationSettings = lazy(() => import('./NotificationSettings'))
 
 // The same sizes as the other Elevance apps.
 const DRAWER_WIDTH = 248
@@ -107,6 +110,7 @@ export default function Layout() {
   const desktop = useMediaQuery(theme.breakpoints.up('lg'))
   const wide = useMediaQuery(theme.breakpoints.up('md'))
   const { pathname, search } = useLocation()
+  const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   // On a wide screen the navigation folds to a rail of icons; the choice is
   // remembered, and shared with the other Elevance apps.
@@ -118,6 +122,7 @@ export default function Layout() {
   const [searching, setSearching] = useState(false)
   const [choosing, setChoosing] = useState(false)
   const [create, setCreate] = useState<CreateDefaults | null>(null)
+  const [notificationSettings, setNotificationSettings] = useState(false)
   const openIssue = new URLSearchParams(search).get('issue')
 
   // Cmd/Ctrl+S searches (instead of saving the page); Cmd/Ctrl+K creates.
@@ -136,6 +141,19 @@ export default function Layout() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // A tapped device notification, with the app already open: the service
+  // worker focuses this window and names the page. An issue opens over
+  // whatever page is showing (as from the bell); anything else is navigated
+  // to. No reload, so nothing typed elsewhere is lost.
+  useEffect(() => onWorkerMessage((m) => {
+    if (m.type !== 'open') return
+    const route = routerPath(m.url)
+    if (!route) return
+    const issue = new URL(route, 'http://x').searchParams.get('issue')
+    if (issue) navigate({ pathname, search: `?issue=${encodeURIComponent(issue)}` })
+    else navigate(route)
+  }), [navigate, pathname])
 
   const actions = useMemo<LayoutActions>(() => ({ openCreate: (defaults = {}) => setCreate(defaults) }), [])
   const current = projects.filter((p) => !p.archived_at)
@@ -305,6 +323,17 @@ export default function Layout() {
               <MenuItem
                 onClick={() => {
                   setUserMenu(null)
+                  setNotificationSettings(true)
+                }}
+              >
+                <ListItemIcon>
+                  <NotificationsNoneOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                Notifications
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setUserMenu(null)
                   signOut()
                 }}
               >
@@ -337,6 +366,7 @@ export default function Layout() {
         {create && <CreateIssueDialog defaults={create} onClose={() => setCreate(null)} />}
         {searching && <SearchDialog onClose={() => setSearching(false)} />}
         {choosing && <CreateMenu onIssue={() => setCreate({})} onClose={() => setChoosing(false)} />}
+        {notificationSettings && <NotificationSettings onClose={() => setNotificationSettings(false)} />}
       </Suspense>
     </LayoutContext.Provider>
   )

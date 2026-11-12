@@ -36,7 +36,7 @@ People** (`el-people`), on the same stack.
 | **Search** | **Cmd/Ctrl+S** (or the search box in the header): one box, results grouped as **Issues**, **Todos** and **Notes**, at most five of each. Your todos and notes stay yours: search only finds your own notes and the todos you're on. A key like `WEB-12` opens that issue; arrow keys and Enter pick a result; *Search all issues* opens the Issues list with the words. |
 | **Create** | The **Create** button or **Cmd/Ctrl+K** asks what to make: **1** an issue, **2** a todo, **3** a note. Press the number, or click or use the arrow keys, to open that form. (Meetings are made in Google Calendar.) |
 | **Dashboard** | Up front, **the meeting you're in** (or the next one today, or the one that just ended), from your Google Calendar: how long it has left, a Join button, its guests, what's later today, and **your notes on it, open to type into**. Then four panels: an **agenda** for **Today** or **This week** (by day: your meetings, releases, your issues due and your todos, each marked differently, meetings you've taken notes on flagged, anything overdue pinned on top in red; click a meeting or release to open it); your **todos**; the **issues assigned to you**; your **pinned notes**. Then your projects' sprints. |
-| **Notifications** | In the app (live): assigned, mentioned, a comment or status change on something you watch. In **Google Chat**: per project, the events it picks, each issue in its own thread; plus a company space for releases. |
+| **Notifications** | In the app (live): assigned, mentioned, a comment or status change on something you watch. **On your devices** (push), even with the app closed, once you turn them on. Opening an issue marks its notifications read. In **Google Chat**: per project, the events it picks, each issue in its own thread; plus a company space for releases. |
 | **Admin** | People (add by company email, roles, deactivate), issue types, the company Chat space. |
 
 Everything works on desktop, tablet and phone: boards scroll sideways,
@@ -76,9 +76,21 @@ Elevance Work can be **installed** (a PWA). It then opens in its own window (or 
 - **What is kept on the device** is the app itself (scripts, styles, fonts, icons), so it opens at once. **Nothing from Supabase is ever cached**: every record is fetched each time, and none of it is readable offline. Without a connection the app opens and shows nothing.
 - **A new version waits to be asked.** After a deploy the app says *"A new version is available"* with a **Reload** button. Until you press it, or close every window of the app, you keep the build you started with.
 - **Opening the app always asks for the latest page.** The copy kept on the device is used only with no connection, so a deploy shows the next time the app is opened; the prompt above is for an app that is already open.
-- No working offline, no push notifications.
+- No working offline.
 
-It is built by [`vite.pwa.ts`](vite.pwa.ts), a small build plugin with no dependency, which writes `manifest.webmanifest` and `sw.js` at build time. The icons are in `public/icons/`; replace those three files to change the artwork, keeping it inside the middle 80% of the square (phones crop it to a circle). Our apps are served from one origin, so the service worker only answers for, and only clears caches belonging to, its own folder.
+It is built by [`vite.pwa.ts`](vite.pwa.ts), a small build plugin with no dependency, which writes `manifest.webmanifest` and `sw.js` at build time. The icons are in `public/icons/`; replace those files to change the artwork, keeping it inside the middle 80% of the square (phones crop it to a circle). `badge-96.png` is the small white silhouette Android shows in the status bar. Our apps are served from one origin, so the service worker only answers for, and only clears caches belonging to, its own folder.
+
+## Notifications on your devices
+
+Everything in the bell can also arrive on your phone or computer as a
+notification, even with the app closed.
+
+- **Turning them on is per device.** The bell offers it (*Turn on*, or *Not now* for a week), and so does **account menu → Notifications**, which also sends a test and lists every device you've turned them on for, to remove.
+- **Where it works:** Chrome, Edge, Firefox and Samsung Internet on a computer or Android, in a tab or installed; Safari on a Mac. **On an iPhone or iPad only once the app is on the Home Screen** (iOS 16.4+): Safari in a tab cannot have them, and the bell says to install first.
+- **"Stopped" is said, not hidden.** If a device that had them stops (you blocked them, removed it from another device, or the browser dropped it), the bell gets a dot and says so until it's turned back on.
+- **A notification shows the issue, who did what, and for a comment or mention its words.** One per issue: a newer one replaces the older. Tapping it opens the issue, in the open app window if there is one. An installed app's icon shows the unread count.
+- **A shared computer hands over.** Signing out turns them off on that device; whoever turns them on there next gets their own, never the last person's.
+- **Private in transit.** Each one is encrypted to the device, so the push service carrying it (Google, Apple, Mozilla) can't read it. Deactivating someone removes their devices.
 
 ## Who can do what
 
@@ -208,11 +220,34 @@ Workspace admin rights and no domain-wide delegation.
    select vault.create_secret('<the same FUNCTIONS_SHARED_SECRET>', 'functions_secret');
    ```
 
+   The same two secrets let the database call `push-send` (device
+   notifications), below.
+
 7. **Chat**: in a Google Chat space, *Apps & integrations → Webhooks → Add
    webhook*, and paste its address into a project's *Settings → Google
    Chat* (or, for the company space, *Admin → Workspace*).
 
-### 4. GitHub (optional)
+### 4. Notifications on devices (optional)
+
+Needs the two Vault secrets from *Google Workspace*, step 6. Without this the bell still works;
+the app just never offers device notifications.
+
+1. Make a key pair: `yarn vapid-keys`. It prints both halves and the commands below.
+2. Give both to the function, with an address the push services can contact, and deploy it:
+
+   ```bash
+   supabase secrets set VAPID_PUBLIC_KEY=<public> VAPID_PRIVATE_KEY=<private> \
+     VAPID_SUBJECT=mailto:<a team address>
+   supabase functions deploy push-send --no-verify-jwt
+   ```
+
+3. Give the public half to the app at build time: `VITE_VAPID_PUBLIC_KEY` in
+   `.env`, and as a repository **Variable** for the deploy.
+
+Changing the pair later is allowed, but everyone has to turn notifications
+back on.
+
+### 5. GitHub (optional)
 
 An issue lists the pull requests, branches and commits that name its key
 (`WEB-12`) in a **branch name, a commit message or a pull request title**.
@@ -241,12 +276,13 @@ deliveries*, and can redeliver one. Links start from the day the webhook is
 added: earlier branches and pull requests appear the next time they change.
 Deleting a branch removes its link; pull requests and commits stay.
 
-### 5. Deploying
+### 6. Deploying
 
 Pushes to `main` run `.github/workflows/deploy.yml`: lint, typecheck,
 browser tests, database tests, schema check, build, then deploy to GitHub
 Pages. Set the repository **Variables** `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_ANON_KEY`, and enable Pages with *GitHub Actions* as the
+`VITE_SUPABASE_ANON_KEY` (and `VITE_VAPID_PUBLIC_KEY` for device
+notifications), and enable Pages with *GitHub Actions* as the
 source. The app uses a hash router, so no rewrites are needed.
 
 ---
@@ -262,6 +298,7 @@ source. The app uses a hash router, so no rewrites are needed.
 | `yarn test:sql` | Database tests (`test/sql/*.test.sql`): RLS, grants, triggers and RPCs, as real signed-in people, on a throwaway Postgres. |
 | `yarn check:schema` | Proves `supabase/schema.sql` equals the migrations. |
 | `yarn build` | Typecheck, then the production bundle in `dist/`. |
+| `yarn vapid-keys` | A fresh key pair for device notifications. |
 
 `test:sql` and `check:schema` need the Postgres server binaries on `PATH`
 (`brew install postgresql@16`, then
@@ -297,8 +334,12 @@ A database change is a new migration **and** the same end state in
   kind and options. Removing an option doesn't break issues that use it;
   deleting a field drops its values the next time each issue is saved.
 - **Notifications** never go to the person who caused them, or to someone
-  who can't see the issue. A mention counts once, as a mention, not also
-  as a comment.
+  who can't see the issue. One save tells each person one thing, the most
+  direct: assigned, then mentioned, then a status change, then a comment.
+  An assignment made with a status change says both (*"Amna assigned you
+  and moved it to In Progress"*). Device notifications are sent by the database after the
+  write (like Chat), so a push service being down never fails a save; one
+  save makes one call to send them, however many people it reaches.
 - **Google is never in the way.** Chat and Calendar calls are queued by
   the database (pg_net) after the write succeeds; if Google is down, the
   issue is still saved. Files and docs live in the shared drive: removing

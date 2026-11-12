@@ -160,7 +160,7 @@ select t.throws('a client can''t queue calls to the Edge Functions (they carry t
 select t.throws('…nor send a project''s Chat messages',
   $$select public.chat_notify(t.project('OPS'), 'issue_created', '{}')$$, '42501');
 select t.throws('…nor notify people',
-  $$select public.notify_person(t.pid('amna'), 'assigned', null)$$, '42501');
+  $$select public.notify_people(array[t.pid('amna')], array['assigned']::public.notification_kind[], null)$$, '42501');
 select t.throws('…nor write history',
   $$select public.log_issue_event(gen_random_uuid(), t.project('OPS'), 'status', 'a', 'b')$$, '42501');
 select t.throws('…nor ask anyone''s role in a project',

@@ -13,7 +13,7 @@ export type SprintState = 'future' | 'active' | 'closed'
 export type ReleaseStatus = 'unreleased' | 'released' | 'archived'
 export type LinkKind = 'blocks' | 'relates' | 'duplicates' | 'clones'
 export type DocType = 'document' | 'spreadsheet' | 'presentation' | 'form' | 'drawing' | 'folder' | 'file'
-export type NotificationKind = 'assigned' | 'mentioned' | 'commented' | 'status_changed'
+export type NotificationKind = 'assigned' | 'mentioned' | 'commented' | 'status_changed' | 'test'
 export type NoteColor = 'yellow' | 'orange' | 'red' | 'pink' | 'purple' | 'blue' | 'teal' | 'green' | 'gray' | 'white'
 export type IssueIcon = 'epic' | 'story' | 'task' | 'bug' | 'subtask' | 'spike' | 'improvement' | 'feature'
 
@@ -323,4 +323,15 @@ export interface Notification {
   detail: string | null
   read_at: string | null
   created_at: string
+}
+
+/** A device someone turned notifications on for (Web Push). The keys are never readable. */
+export interface PushSubscriptionRow {
+  id: string
+  profile_id: string
+  endpoint: string
+  /** "Chrome on Android". */
+  device: string | null
+  created_at: string
+  last_used_at: string | null
 }

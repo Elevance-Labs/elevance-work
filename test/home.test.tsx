@@ -171,9 +171,10 @@ check('the bell counts unread notifications', !!labelled('Notifications (1 unrea
 check('…and listens for new ones', captured.channels.includes('notifications:p-sara'))
 await click(button('Notifications (1 unread)'))
 check('it says who did what, on which issue', text().includes('Amna Khan commented') && text().includes('WEB-2 · Hero banner'))
+check('…quoting the comment', text().includes('“Use the new photo”'))
 await click([...document.querySelectorAll('.MuiPopover-paper .MuiListItemButton-root')].find((b) => b.textContent?.includes('commented')))
 check('opening one marks it read', captured.updates.some((u) => u.table === 'notifications' && typeof u.values.read_at === 'string' &&
-  JSON.stringify(u.filters) === '[["id","eq","n-1"]]'))
+  JSON.stringify(u.filters) === '[["id","in",["n-1"]]]'))
 check('…and opens the issue where you are', location.pathname === '/dashboard' && location.search === '?issue=WEB-2')
 await settleLazy()
 check('…in the dialog', await waitFor(() => dialog()?.textContent?.includes('Hero banner')))

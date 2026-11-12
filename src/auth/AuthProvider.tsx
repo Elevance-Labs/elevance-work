@@ -4,6 +4,7 @@ import { COMPANY_DOMAIN } from '../lib/constants'
 import { SSO_PARAM, ssoHint } from '../lib/suite'
 import { CALENDAR_SIGN_IN, calendarSignInPrompt, takeCalendarGrant } from '../lib/googleCalendar'
 import type { Profile } from '../lib/types'
+import { forgetPushDevice } from '../components/usePushDevice'
 
 interface AuthState {
   loading: boolean
@@ -145,7 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         if (signInError) setError(signInError.message)
       },
+      // This device stops getting the person's notifications first, while
+      // the session that may delete its row still exists.
       signOut: async () => {
+        await forgetPushDevice()
         await supabase.auth.signOut()
       },
       refreshProfile,

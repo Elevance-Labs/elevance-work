@@ -226,7 +226,8 @@ function withEmbeds(table: string, row: Row): Row {
   switch (table) {
     case 'notifications': {
       const i = find('issues', row.issue_id)
-      return { ...row, issue: i ? { key: i.key, title: i.title } : null }
+      const c = find('comments', row.comment_id)
+      return { ...row, issue: i ? { key: i.key, title: i.title } : null, comment: c ? { body: c.body } : null }
     }
     case 'todos': {
       const i = find('issues', row.issue_id)
@@ -322,6 +323,12 @@ type Op = 'select' | 'insert' | 'update' | 'delete'
 type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'is' | 'in' | 'not' | 'ov' | 'fts' | 'or' | 'and'
 export type Filter = [col: string, op: FilterOp, value: unknown]
 
+/** Realtime listeners the app registered, so a test can deliver a change. */
+export const realtime: { channel: string; handler: () => void }[] = []
+export function emitRealtime(channel: string) {
+  for (const r of realtime.filter((x) => x.channel === channel)) r.handler()
+}
+
 export const captured = {
   reads: [] as string[],
   selects: [] as { table: string; columns: string; filters: Filter[] }[],
@@ -414,6 +421,7 @@ export function reset() {
     notifications: copy(NOTIFICATIONS),
   }
   for (const list of Object.values(captured)) list.length = 0
+  realtime.length = 0
   failures.clear()
   Object.assign(googleCalendar, { connected: false, lapsed: false, events: [] })
   authState.session = null
@@ -678,6 +686,30 @@ const RPCS: Record<string, (args: Row) => unknown> = {
     Object.assign(find('sprints', p_sprint)!, { state: 'closed', completed_at: new Date().toISOString() })
     return null
   },
+  // As in the push_notifications migration: turning on makes the device the
+  // caller's; a check only confirms (and keeps) a registration still theirs,
+  // and ends somebody else's.
+  save_push_subscription: ({ p_endpoint, p_device, p_refresh_only }) => {
+    const rows = rowsIn('push_subscriptions')
+    const row = rows.find((r) => r.endpoint === p_endpoint)
+    if (p_refresh_only) {
+      if (!row) return false
+      if (row.profile_id !== me()?.id) {
+        db.push_subscriptions = rows.filter((r) => r !== row)
+        return false
+      }
+      return true
+    }
+    const now = new Date().toISOString()
+    if (row) Object.assign(row, { profile_id: me()?.id, device: p_device, created_at: now, last_used_at: null })
+    else rows.push({ id: `new-${nextId++}`, profile_id: me()?.id, endpoint: p_endpoint, device: p_device, created_at: now, last_used_at: null })
+    return true
+  },
+  send_test_notification: () => {
+    rowsIn('notifications').push({ id: `new-${nextId++}`, recipient_id: me()?.id, actor_id: null, kind: 'test', issue_id: null,
+      comment_id: null, detail: null, read_at: null, created_at: new Date().toISOString() })
+    return null
+  },
   todo_leave: ({ p_todo }) => {
     const t = find('todos', p_todo)
     if (t) t.shared_with = (t.shared_with as string[]).filter((id) => id !== me()?.id)
@@ -775,7 +807,14 @@ export const supabase = {
   },
   channel(name: string): Channel {
     captured.channels.push(name)
-    const ch: Channel = { on: () => ch, subscribe: () => ch }
+    const ch: Channel = {
+      on: (...args: unknown[]) => {
+        const handler = args.at(-1)
+        if (typeof handler === 'function') realtime.push({ channel: name, handler: handler as () => void })
+        return ch
+      },
+      subscribe: () => ch,
+    }
     return ch
   },
   removeChannel: () => Promise.resolve('ok'),

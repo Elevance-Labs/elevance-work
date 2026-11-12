@@ -1,8 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { Box, CircularProgress } from '@mui/material'
 import { useAuth } from './auth/AuthProvider'
 import { WorkspaceProvider } from './workspace/WorkspaceProvider'
+import { NotificationsProvider } from './workspace/notifications'
 import Layout from './components/Layout'
+import { Splash } from './components/common'
 import Login from './pages/Login'
 import Dashboard from './pages/home/Dashboard'
 import Todos from './pages/home/Todos'
@@ -28,20 +29,15 @@ import People from './pages/admin/People'
 import IssueTypes from './pages/admin/IssueTypes'
 import WorkspaceSettings from './pages/admin/Workspace'
 
-const spinner = (
-  <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-    <CircularProgress />
-  </Box>
-)
-
 export default function App() {
   const { loading, profile, isAdmin } = useAuth()
 
-  if (loading) return spinner
+  if (loading) return <Splash />
   if (!profile) return <Login />
 
   return (
     <WorkspaceProvider key={profile.id}>
+      <NotificationsProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
@@ -76,6 +72,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
+      </NotificationsProvider>
     </WorkspaceProvider>
   )
 }
