@@ -49,6 +49,7 @@ Work, Support and People wear the same shell, so switching between them does not
 - **Header**: the app switcher, the app's logo and name on the left; your avatar with your name and role on the right, opening a menu that starts with who you are.
 - **Navigation** on the left, with the current page tinted. **Collapse**, at its foot, folds it to a rail of icons (hover one for its name) and expands it again. The choice is remembered and shared by the three apps, so the screen keeps its shape as you switch.
 - **Type and colour**: Roboto, bold page titles, the same indigo, corners, buttons and table headings.
+- **Light or dark**: **account menu → Theme** picks *Light*, *Dark* or *System* (follow the device; the default). The choice is remembered in the browser and shared by the three apps.
 
 The look is set in `src/theme` and the shell in the layout component of each app. They are kept the same by hand: a change to one belongs in all three.
 

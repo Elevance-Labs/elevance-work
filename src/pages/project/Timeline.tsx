@@ -341,7 +341,7 @@ export default function Timeline() {
                 ? bar(c, span, { height: 12, color: theme.palette.grey[500] })
                 : null,
               c.id,
-              { bgcolor: 'grey.50' },
+              { bgcolor: 'background.subtle' },
             )
           })
         : []),
@@ -386,7 +386,7 @@ export default function Timeline() {
                 </Typography>
               )),
               'months',
-              { bgcolor: 'grey.50' },
+              { bgcolor: 'background.subtle' },
             )}
 
             {sprints.length > 0 && line(
@@ -398,7 +398,7 @@ export default function Timeline() {
                   <Tooltip key={s.id} title={`${s.name}, ${formatDateRange(s.start_date, s.end_date)}`}>
                     <Box sx={{
                       position: 'absolute', left: at.offset * px, width: at.length * px, top: 6, height: 18, borderRadius: 0.5, overflow: 'hidden',
-                      bgcolor: s.state === 'active' ? 'primary.light' : 'grey.300', color: s.state === 'active' ? '#fff' : 'text.secondary',
+                      bgcolor: s.state === 'active' ? 'primary.light' : 'action.disabledBackground', color: s.state === 'active' ? 'primary.contrastText' : 'text.secondary',
                     }}>
                       <Typography variant="caption" noWrap sx={{ px: 0.75, display: 'block', lineHeight: '18px' }}>{s.name}</Typography>
                     </Box>

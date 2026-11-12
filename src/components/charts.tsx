@@ -2,7 +2,7 @@
 // bars, stacked areas, a donut and labelled bars. No charting dependency;
 // each scales to its container's width.
 import { useId, type ReactNode } from 'react'
-import { Box, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Stack, Tooltip, Typography, useTheme } from '@mui/material'
 
 export interface Series {
   label: string
@@ -42,19 +42,20 @@ function Frame({ height, labels, max, children, title }: { height: number; label
   const plotH = height - PAD.top - PAD.bottom
   const every = Math.max(1, Math.ceil(labels.length / 8))
   const x = (i: number) => PAD.left + (labels.length <= 1 ? 0 : (i * (W - PAD.left - PAD.right)) / (labels.length - 1))
+  const { palette } = useTheme()
   return (
     <svg viewBox={`0 0 ${W} ${height}`} width="100%" role="img" aria-label={title} style={{ display: 'block', overflow: 'visible' }}>
       {ticks(max).map((t) => {
         const y = PAD.top + plotH - (t / max) * plotH
         return (
           <g key={t}>
-            <line x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} stroke="#e4e6ea" />
-            <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="11" fill="#626f86">{t}</text>
+            <line x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} stroke={palette.divider} />
+            <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="11" fill={palette.text.secondary}>{t}</text>
           </g>
         )
       })}
       {labels.map((l, i) => (i % every === 0 || i === labels.length - 1) && (
-        <text key={i} x={x(i)} y={height - 8} textAnchor="middle" fontSize="11" fill="#626f86">{l}</text>
+        <text key={i} x={x(i)} y={height - 8} textAnchor="middle" fontSize="11" fill={palette.text.secondary}>{l}</text>
       ))}
       {children}
     </svg>
@@ -127,6 +128,7 @@ export function BarChart({ labels, series, height = 240, title }: { labels: stri
   const plotH = height - PAD.top - PAD.bottom
   const slot = (W - PAD.left - PAD.right) / Math.max(1, labels.length)
   const bar = Math.min(28, (slot * 0.7) / series.length)
+  const { palette } = useTheme()
   return (
     <Box>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" role="img" aria-label={title} style={{ display: 'block' }}>
@@ -134,8 +136,8 @@ export function BarChart({ labels, series, height = 240, title }: { labels: stri
           const y = PAD.top + plotH - (t / max) * plotH
           return (
             <g key={t}>
-              <line x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} stroke="#e4e6ea" />
-              <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="11" fill="#626f86">{t}</text>
+              <line x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} stroke={palette.divider} />
+              <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="11" fill={palette.text.secondary}>{t}</text>
             </g>
           )
         })}
@@ -152,7 +154,7 @@ export function BarChart({ labels, series, height = 240, title }: { labels: stri
                   </rect>
                 )
               })}
-              <text x={cx} y={height - 8} textAnchor="middle" fontSize="11" fill="#626f86">{l.length > 14 ? `${l.slice(0, 13)}…` : l}</text>
+              <text x={cx} y={height - 8} textAnchor="middle" fontSize="11" fill={palette.text.secondary}>{l.length > 14 ? `${l.slice(0, 13)}…` : l}</text>
             </g>
           )
         })}
@@ -172,13 +174,14 @@ export function Donut({ slices, size = 160, center, title }: { slices: DonutSlic
   const id = useId()
   const total = slices.reduce((s, x) => s + x.value, 0)
   const r = 15.915 // circumference 100
+  const { palette } = useTheme()
   let offset = 25
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ alignItems: 'center' }}>
       <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
         <svg viewBox="0 0 42 42" width={size} height={size} role="img" aria-labelledby={id}>
           <title id={id}>{title}</title>
-          <circle cx="21" cy="21" r={r} fill="none" stroke="#f1f2f4" strokeWidth="6" />
+          <circle cx="21" cy="21" r={r} fill="none" stroke={palette.background.muted} strokeWidth="6" />
           {total > 0 && slices.filter((s) => s.value > 0).map((s) => {
             const pct = (s.value / total) * 100
             const el = (
@@ -218,7 +221,7 @@ export function BarList({ rows, total }: { rows: { label: ReactNode; value: numb
             <Typography variant="body2" sx={{ color: 'text.secondary', pl: 1 }}>{r.value}</Typography>
           </Stack>
           <Tooltip title={r.hint ?? ''}>
-            <Box sx={{ height: 8, bgcolor: 'grey.100', borderRadius: 4, overflow: 'hidden' }}>
+            <Box sx={{ height: 8, bgcolor: 'background.muted', borderRadius: 4, overflow: 'hidden' }}>
               <Box sx={{ width: `${(r.value / max) * 100}%`, height: '100%', bgcolor: r.color ?? 'primary.main', borderRadius: 4 }} />
             </Box>
           </Tooltip>

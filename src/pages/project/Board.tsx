@@ -18,7 +18,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Alert, Avatar, AvatarGroup, Box, Button, ButtonBase, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material'
+import { Alert, Avatar, AvatarGroup, Box, Button, ButtonBase, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography, alpha } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import { useMe } from '../../auth/AuthProvider'
 import { supabase } from '../../lib/supabase'
@@ -67,7 +67,7 @@ function Column({
     <Box
       ref={setNodeRef}
       data-column={status.name}
-      sx={{ bgcolor: isOver ? 'action.selected' : 'grey.100', borderRadius: 2, p: 1, minHeight: 120, display: 'flex', flexDirection: 'column', gap: 1 }}
+      sx={{ bgcolor: isOver ? 'action.selected' : 'background.muted', borderRadius: 2, p: 1, minHeight: 120, display: 'flex', flexDirection: 'column', gap: 1 }}
     >
       <SortableContext items={issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         {issues.map((i) => <BoardCard key={i.id} issue={i} moves={movesFor(i)} draggable={editable} />)}
@@ -316,7 +316,7 @@ export default function Board() {
               const n = visible.filter((i) => i.status_id === s.id)
               const over = s.wip_limit !== null && n.length > s.wip_limit
               return (
-                <Stack key={s.id} direction="row" spacing={1} sx={{ px: 1, py: 0.75, alignItems: 'center', bgcolor: over ? '#ffeceb' : 'grey.100', borderRadius: 2 }}>
+                <Stack key={s.id} direction="row" spacing={1} sx={{ px: 1, py: 0.75, alignItems: 'center', bgcolor: (t) => (over ? alpha(t.palette.error.main, t.palette.mode === 'dark' ? 0.24 : 0.1) : t.palette.background.muted), borderRadius: 2 }}>
                   <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', flexGrow: 1 }} noWrap>
                     {s.name}
                   </Typography>

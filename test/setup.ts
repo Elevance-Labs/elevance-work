@@ -8,12 +8,13 @@ import { JSDOM } from 'jsdom'
 
 type Global = Record<string, unknown>
 
-const screen = { width: 1280, displayMode: 'browser' }
+const screen = { width: 1280, displayMode: 'browser', scheme: 'light' }
 
 /**
- * The screen the media queries describe: its width, and whether the page is
- * a browser tab (`browser`) or the installed app (`standalone`). Read when a
- * component mounts, so set it before `mountApp`.
+ * The screen the media queries describe: its width, whether the page is
+ * a browser tab (`browser`) or the installed app (`standalone`), and the
+ * device's own light or dark setting (`scheme`). Read when a component
+ * mounts, so set it before `mountApp`.
  */
 export function setScreen(next: Partial<typeof screen>) {
   Object.assign(screen, next)
@@ -46,14 +47,17 @@ export function setupDom(url = 'http://localhost/') {
   g.cancelAnimationFrame = w.cancelAnimationFrame = (id: number) => clearTimeout(id)
   // jsdom has no media queries. Answer min/max-width ones as a 1280px desktop
   // (see `setScreen`), so the layout renders its permanent nav drawer, and
-  // display-mode ones as a browser tab.
+  // display-mode ones as a browser tab, prefers-color-scheme as light.
   w.matchMedia = g.matchMedia = (query: string) => {
     const min = /min-width:\s*([\d.]+)px/.exec(query)
     const max = /max-width:\s*([\d.]+)px/.exec(query)
     const mode = /display-mode:\s*([\w-]+)/.exec(query)
+    const scheme = /prefers-color-scheme:\s*(\w+)/.exec(query)
     const matches = mode
       ? mode[1] === screen.displayMode
-      : (!min || screen.width >= Number(min[1])) && (!max || screen.width <= Number(max[1]))
+      : scheme
+        ? scheme[1] === screen.scheme
+        : (!min || screen.width >= Number(min[1])) && (!max || screen.width <= Number(max[1]))
     return {
       matches, media: query, onchange: null,
       addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

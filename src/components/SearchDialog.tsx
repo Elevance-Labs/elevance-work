@@ -24,7 +24,7 @@ import { useMe } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { formatDate } from '../lib/constants'
 import { ISSUE_COLUMNS, parseIssueKey } from '../lib/issues'
-import { NOTE_COLORS, noteHeading } from '../lib/notes'
+import { noteColor, noteHeading } from '../lib/notes'
 import { SEARCH_LIMIT, searchNotes, searchTodos } from '../lib/search'
 import type { Issue, Note, Todo } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
@@ -120,7 +120,7 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
       }
       for (const n of searchNotes(local.notes, text)) {
         out.push({
-          id: `note:${n.id}`, group: 'Notes', icon: <StickyNote2Icon fontSize="small" sx={{ color: NOTE_COLORS[n.color].bg, stroke: 'rgba(0,0,0,.25)' }} />,
+          id: `note:${n.id}`, group: 'Notes', icon: <StickyNote2Icon fontSize="small" sx={{ color: (t) => noteColor(n.color, t.palette.mode), stroke: (t) => t.palette.divider }} />,
           primary: noteHeading(n), secondary: n.title.trim() ? n.body.split('\n')[0].slice(0, 80) : undefined,
           go: go(`/notes?note=${n.id}`),
         })

@@ -6,7 +6,7 @@
 // words. A note is archived from here; an archived one is restored or, only
 // then, deleted.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Autocomplete, Box, Button, Chip, FormControlLabel, Grid, MenuItem, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material'
+import { Autocomplete, Box, Button, Chip, FormControlLabel, Grid, MenuItem, Stack, Switch, TextField, Tooltip, Typography, useTheme, type Theme } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined'
 import { supabase } from '../../lib/supabase'
@@ -14,6 +14,7 @@ import { errorMessage, formatDay, timeAgo } from '../../lib/constants'
 import {
   DEFAULT_NOTE_COLOR,
   NOTE_COLORS,
+  noteColor,
   NOTE_COLOR_KEYS,
   NOTE_COLUMNS,
   meetingLabel,
@@ -38,6 +39,9 @@ interface NoteForm {
   meetingLinked: boolean
 }
 
+/** Fields sit on the note's colour behind a light (or, dark, a deep) veil. */
+const onNote = (t: Theme) => (t.palette.mode === 'dark' ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.6)')
+
 export function ColorPicker({ value, onChange }: { value: NoteColor; onChange: (c: NoteColor) => void }) {
   return (
     <Stack direction="row" role="radiogroup" aria-label="Colour" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
@@ -46,7 +50,7 @@ export function ColorPicker({ value, onChange }: { value: NoteColor; onChange: (
           <Box component="button" type="button" role="radio" aria-checked={value === c} aria-label={NOTE_COLORS[c].label}
             onClick={() => onChange(c)}
             sx={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', p: 0, display: 'grid', placeItems: 'center',
-              bgcolor: NOTE_COLORS[c].bg, border: 2, borderColor: value === c ? 'primary.main' : 'rgba(0,0,0,0.15)' }}>
+              bgcolor: (t) => noteColor(c, t.palette.mode), border: 2, borderColor: value === c ? 'primary.main' : 'divider' }}>
             {value === c && <CheckIcon sx={{ fontSize: 16, color: 'primary.main' }} />}
           </Box>
         </Tooltip>
@@ -73,6 +77,7 @@ export default function NoteDialog({
   onDeleted: (id: string) => void
 }) {
   const { projects, projectById } = useWorkspace()
+  const { palette } = useTheme()
   const [form, setForm] = useState<NoteForm>(() => ({
     title: note?.title ?? '',
     body: note?.body ?? '',
@@ -227,7 +232,7 @@ export default function NoteDialog({
     <>
       <FormDialog open title={!note ? 'New note' : archived ? 'Archived note' : 'Edit note'} busy={busy} error={error}
         onSubmit={() => save()} onClose={close}
-        paperColor={NOTE_COLORS[form.color].bg}
+        paperColor={noteColor(form.color, palette.mode)}
         autosave={status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : ''}
         extraActions={current && (archived ? (
           <>
@@ -259,13 +264,13 @@ export default function NoteDialog({
           }
           renderInput={(params) => (
             <TextField {...params} label="Labels" placeholder={form.labelIds.length ? '' : 'Pick or type a new one'}
-              sx={{ '& .MuiInputBase-root': { bgcolor: 'rgba(255,255,255,0.6)' } }} />
+              sx={{ '& .MuiInputBase-root': { bgcolor: onNote } }} />
           )}
         />
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField select fullWidth label="Project" value={form.projectId} onChange={(e) => set({ projectId: e.target.value })}
-              sx={{ '& .MuiInputBase-root': { bgcolor: 'rgba(255,255,255,0.6)' } }}>
+              sx={{ '& .MuiInputBase-root': { bgcolor: onNote } }}>
               <MenuItem value="">None</MenuItem>
               {projectOptions.map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
               {form.projectId && !projectById(form.projectId) && <MenuItem value={form.projectId}>A project you can no longer see</MenuItem>}
@@ -280,7 +285,7 @@ export default function NoteDialog({
           {current?.meeting_id && form.meetingLinked && (
             <Grid size={12}>
               <Chip icon={<EventOutlinedIcon />} label={meetingLabel(current)} onDelete={() => set({ meetingLinked: false })}
-                variant="outlined" sx={{ bgcolor: 'rgba(255,255,255,0.6)', maxWidth: '100%' }} />
+                variant="outlined" sx={{ bgcolor: onNote, maxWidth: '100%' }} />
             </Grid>
           )}
         </Grid>

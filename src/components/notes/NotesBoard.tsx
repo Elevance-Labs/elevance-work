@@ -31,6 +31,7 @@ import { errorMessage, timeAgo } from '../../lib/constants'
 import {
   EMPTY_NOTE_FILTER,
   NOTE_COLORS,
+  noteColor,
   NOTE_COLOR_KEYS,
   NOTE_COLUMNS,
   byPinnedThenRecent,
@@ -74,8 +75,8 @@ function NoteCard({
   const noteLabels = note.label_ids.map((id) => labels.get(id)).filter((l): l is NoteLabel => !!l)
   return (
     <ButtonBase onClick={onOpen} aria-label={`Note: ${heading}`} data-note={note.id}
-      sx={{ display: 'block', width: '100%', textAlign: 'left', p: 1.5, borderRadius: 2, bgcolor: NOTE_COLORS[note.color].bg,
-        border: 1, borderColor: 'rgba(0,0,0,0.08)', boxShadow: '0 1px 2px rgba(0,0,0,0.08)', breakInside: 'avoid', mb: 2,
+      sx={{ display: 'block', width: '100%', textAlign: 'left', p: 1.5, borderRadius: 2, bgcolor: (t) => noteColor(note.color, t.palette.mode),
+        border: 1, borderColor: 'divider', boxShadow: '0 1px 2px rgba(0,0,0,0.08)', breakInside: 'avoid', mb: 2,
         transition: 'box-shadow 120ms', '&:hover': { boxShadow: '0 3px 8px rgba(0,0,0,0.16)' } }}>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'flex-start' }}>
         <Typography variant="subtitle2" sx={{ wordBreak: 'break-word', flexGrow: 1 }}>{heading}</Typography>
@@ -89,7 +90,7 @@ function NoteCard({
       )}
       {(noteLabels.length > 0 || project || note.meeting_id) && (
         <Stack direction="row" sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-          {noteLabels.map((l) => <Chip key={l.id} size="small" label={l.name} sx={{ bgcolor: 'rgba(0,0,0,0.07)' }} />)}
+          {noteLabels.map((l) => <Chip key={l.id} size="small" label={l.name} sx={{ bgcolor: 'action.selected' }} />)}
           {project && <Chip size="small" variant="outlined" label={project.name} />}
           {note.meeting_id && <Chip size="small" variant="outlined" icon={<EventOutlinedIcon />} label={meetingLabel(note)} />}
         </Stack>
@@ -205,8 +206,8 @@ export default function NotesBoard({
           <MenuItem value="">Any colour</MenuItem>
           {NOTE_COLOR_KEYS.map((c) => (
             <MenuItem key={c} value={c}>
-              <Box component="span" sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: NOTE_COLORS[c].bg, border: 1,
-                borderColor: 'rgba(0,0,0,0.2)', mr: 1, display: 'inline-block', verticalAlign: 'middle' }} />
+              <Box component="span" sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: (t) => noteColor(c, t.palette.mode), border: 1,
+                borderColor: 'divider', mr: 1, display: 'inline-block', verticalAlign: 'middle' }} />
               {NOTE_COLORS[c].label}
             </MenuItem>
           ))}

@@ -7,19 +7,23 @@
 import { formatDate } from './constants'
 import type { Note, NoteColor, NoteLabel } from './types'
 
-/** Sticky-note yellow first: the default, as in the schema. */
-export const NOTE_COLORS: Record<NoteColor, { label: string; bg: string }> = {
-  yellow: { label: 'Yellow', bg: '#fff59d' },
-  orange: { label: 'Orange', bg: '#ffd8a8' },
-  red: { label: 'Red', bg: '#ffc9c9' },
-  pink: { label: 'Pink', bg: '#fcc2d7' },
-  purple: { label: 'Purple', bg: '#e5dbff' },
-  blue: { label: 'Blue', bg: '#d0ebff' },
-  teal: { label: 'Teal', bg: '#c3fae8' },
-  green: { label: 'Green', bg: '#d3f9d8' },
-  gray: { label: 'Gray', bg: '#e9ecef' },
-  white: { label: 'White', bg: '#ffffff' },
+/** Sticky-note yellow first: the default, as in the schema. Each has a
+ *  light tint and a deep one for the dark theme. */
+export const NOTE_COLORS: Record<NoteColor, { label: string; bg: string; dark: string }> = {
+  yellow: { label: 'Yellow', bg: '#fff59d', dark: '#635d19' },
+  orange: { label: 'Orange', bg: '#ffd8a8', dark: '#614a19' },
+  red: { label: 'Red', bg: '#ffc9c9', dark: '#5c2b29' },
+  pink: { label: 'Pink', bg: '#fcc2d7', dark: '#5b2245' },
+  purple: { label: 'Purple', bg: '#e5dbff', dark: '#42275e' },
+  blue: { label: 'Blue', bg: '#d0ebff', dark: '#1e3a5f' },
+  teal: { label: 'Teal', bg: '#c3fae8', dark: '#16504b' },
+  green: { label: 'Green', bg: '#d3f9d8', dark: '#345920' },
+  gray: { label: 'Gray', bg: '#e9ecef', dark: '#3c3f43' },
+  white: { label: 'White', bg: '#ffffff', dark: '#2b2d35' },
 }
+
+/** A note colour as drawn in the light or dark theme. */
+export const noteColor = (color: NoteColor, mode: 'light' | 'dark') => NOTE_COLORS[color][mode === 'dark' ? 'dark' : 'bg']
 export const NOTE_COLOR_KEYS = Object.keys(NOTE_COLORS) as NoteColor[]
 export const DEFAULT_NOTE_COLOR: NoteColor = 'yellow'
 

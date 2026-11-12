@@ -70,10 +70,11 @@ export function PriorityIcon({ priority, size = 20 }: { priority: IssuePriority;
   )
 }
 
+// Each category's tint, light and dark.
 const LOZENGE = {
-  todo: { bgcolor: 'grey.200', color: 'grey.800' },
-  in_progress: { bgcolor: '#e9f2ff', color: '#0055cc' },
-  done: { bgcolor: '#dcfff1', color: '#216e4e' },
+  todo: (t: Theme) => ({ bgcolor: 'grey.200', color: 'grey.800', ...t.applyStyles('dark', { bgcolor: 'grey.800', color: 'grey.300' }) }),
+  in_progress: (t: Theme) => ({ bgcolor: '#e9f2ff', color: '#0055cc', ...t.applyStyles('dark', { bgcolor: '#09326c', color: '#cce0ff' }) }),
+  done: (t: Theme) => ({ bgcolor: '#dcfff1', color: '#216e4e', ...t.applyStyles('dark', { bgcolor: '#164b35', color: '#baf3db' }) }),
 }
 
 export function StatusLozenge({ status, sx }: { status: ProjectStatus | undefined; sx?: SxProps<Theme> }) {
@@ -83,8 +84,8 @@ export function StatusLozenge({ status, sx }: { status: ProjectStatus | undefine
       <Box
         component="span"
         sx={[
+          LOZENGE[category],
           {
-            ...LOZENGE[category],
             display: 'inline-block',
             px: 0.75,
             py: 0.125,
@@ -134,7 +135,7 @@ export function Points({ value }: { value: number | null }) {
       <Box
         component="span"
         aria-label={`${formatPoints(value)} story points`}
-        sx={{ bgcolor: 'grey.200', color: 'text.secondary', borderRadius: 5, px: 0.875, fontSize: 12, fontWeight: 600, lineHeight: '20px' }}
+        sx={{ bgcolor: 'action.selected', color: 'text.secondary', borderRadius: 5, px: 0.875, fontSize: 12, fontWeight: 600, lineHeight: '20px' }}
       >
         {formatPoints(value)}
       </Box>

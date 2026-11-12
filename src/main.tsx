@@ -9,7 +9,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import UpdatePrompt from './components/UpdatePrompt'
 import { listenForInstall } from './pwa'
-import { theme } from './theme'
+import { theme, themeSettings } from './theme'
 
 // GitHub Pages can't send X-Frame-Options or frame-ancestors, so the app
 // refuses to run inside another site's frame, where it could be overlaid to
@@ -21,8 +21,8 @@ if (window.top !== window.self) {
   listenForInstall()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+      <ThemeProvider theme={theme} {...themeSettings}>
+        <CssBaseline enableColorScheme />
         <UpdatePrompt />
         <AuthProvider>
           <HashRouter>

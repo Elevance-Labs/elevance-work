@@ -48,6 +48,7 @@ import { Logo, PersonAvatar } from './common'
 import { InstallBanner, InstallNavButton } from './InstallApp'
 import { ProjectAvatar } from './IssueBits'
 import NotificationsBell from './NotificationsBell'
+import ThemeModeSwitch from './ThemeModeSwitch'
 import { onWorkerMessage, routerPath } from '../pwa'
 import type { CreateDefaults } from './CreateIssueDialog'
 import { LayoutContext, type LayoutActions } from './layoutContext'
@@ -319,6 +320,8 @@ export default function Layout() {
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>{me.email}</Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>{me.title ?? APP_ROLE_LABELS[me.app_role]}</Typography>
               </Box>
+              <Divider />
+              <ThemeModeSwitch />
               <Divider />
               <MenuItem
                 onClick={() => {

@@ -133,7 +133,7 @@ function TimeGrid({ days, items, today, onOpen, onDay }: {
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      <Box sx={{ ...fixed, borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
+      <Box sx={{ ...fixed, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.subtle' }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: columns }}>
           <Box />
           {days.map((d) => {
@@ -144,7 +144,7 @@ function TimeGrid({ days, items, today, onOpen, onDay }: {
                   {date.toLocaleDateString(undefined, { weekday: 'short' })}
                 </Typography>
                 <Typography component="span" sx={{ display: 'inline-grid', placeItems: 'center', width: 32, height: 32, borderRadius: '50%', fontSize: 18,
-                  bgcolor: d === today ? 'primary.main' : undefined, color: d === today ? '#fff' : 'text.primary' }}>
+                  bgcolor: d === today ? 'primary.main' : undefined, color: d === today ? 'primary.contrastText' : 'text.primary' }}>
                   {date.getDate()}
                 </Typography>
               </>
@@ -323,7 +323,7 @@ export default function CalendarView({ layers: layerDefs, load, storageKey, tool
 
   const grid = (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderBottom: 1, borderColor: 'divider', bgcolor: 'background.subtle' }}>
         {WEEKDAYS.map((d) => (
           <Typography key={d} variant="caption" sx={{ p: 1, fontWeight: 600, color: 'text.secondary', textAlign: 'center' }}>{d}</Typography>
         ))}
@@ -335,11 +335,11 @@ export default function CalendarView({ layers: layerDefs, load, storageKey, tool
           return (
             <Box key={d} data-day={d}
               sx={{ p: 0.5, borderRight: (i + 1) % 7 ? 1 : 0, borderBottom: i < 35 ? 1 : 0, borderColor: 'divider', minWidth: 0,
-                bgcolor: outside ? 'grey.50' : 'background.paper' }}>
+                bgcolor: outside ? 'background.subtle' : 'background.paper' }}>
               <ButtonBase aria-label={`Open ${formatDate(d)}`} onClick={() => go('day', d)}
                 sx={{ display: 'inline-grid', placeItems: 'center', width: 24, height: 24, borderRadius: '50%', mb: 0.25, fontSize: 12,
                   fontWeight: d === today ? 700 : 400, bgcolor: d === today ? 'primary.main' : undefined,
-                  color: d === today ? '#fff' : outside ? 'text.disabled' : 'text.primary', '&:hover': { bgcolor: d === today ? 'primary.dark' : 'action.hover' } }}>
+                  color: d === today ? 'primary.contrastText' : outside ? 'text.disabled' : 'text.primary', '&:hover': { bgcolor: d === today ? 'primary.dark' : 'action.hover' } }}>
                 {Number(d.slice(8))}
               </ButtonBase>
               <Stack spacing={0.25}>

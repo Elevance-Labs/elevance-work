@@ -75,7 +75,7 @@ export default function Releases() {
                 </Box>
                 <Box sx={{ width: { sm: 240 } }}>
                   <Tooltip title={`${p.done} done, ${p.inProgress} in progress, ${p.todo} to do`}>
-                    <Box sx={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', bgcolor: 'grey.200' }}>
+                    <Box sx={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', bgcolor: 'background.muted' }}>
                       <Box sx={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%`, bgcolor: 'success.main' }} />
                       <Box sx={{ width: `${p.total ? (p.inProgress / p.total) * 100 : 0}%`, bgcolor: 'info.main' }} />
                     </Box>

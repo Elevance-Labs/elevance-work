@@ -95,6 +95,14 @@ behaviour).
   foot, via `components/useNavCollapsed`, one localStorage key shared by the
   apps; the first load is the app's icon over a running bar, `Splash` in `components/common`)
   match Work, Support and People. A change to either belongs in all three.
+- **Light, dark or system.** `theme.ts` has both colour schemes (no CSS
+  variables, so `theme.palette` is the mode in use); `ThemeProvider` takes
+  `themeSettings` (one localStorage key, `elevance.theme`, shared by the
+  apps); `components/ThemeModeSwitch` is its control in the account menu.
+  Colours come from the palette (`background.subtle` / `muted` for tints,
+  `divider`, `text.*`); a fixed hex is for brand or data only, and a tint that
+  must differ by mode uses `applyStyles('dark', …)` or `palette.mode`
+  (note colours carry a dark shade in `lib/notes.ts`).
 - **One of three apps.** `lib/suite.ts` lists the suite (Work, Support,
   People), where each lives (the sibling folder, or `VITE_SUITE_*_URL`) and the
   `?sso=<company email>` hand-over; `components/AppSwitcher` is the grid icon
@@ -124,7 +132,7 @@ behaviour).
 | `src/pages/home/` | Dashboard, Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
 | `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |

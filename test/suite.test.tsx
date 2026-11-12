@@ -1,7 +1,7 @@
 // The suite: the switcher that leads to the sibling apps, and arriving from
 // one. Each app keeps its own session, so the hand-over is a link carrying the
 // person's company email, which the receiving app gives Google as a hint.
-import { setupDom, reporter, text, click, settle, navLabels } from './setup'
+import { setupDom, setScreen, reporter, text, click, settle, navLabels, button } from './setup'
 // Arriving from a sibling app, signed out here, at a deep link.
 setupDom('http://localhost/elevance-work/?sso=Sara@ElevanceLabs.com#/dashboard')
 
@@ -120,5 +120,38 @@ await click(document.querySelector('[aria-label="Expand navigation"]'))
 await settle()
 check('expanding brings the labels back', navLabels().join() === labelsBefore.join(), navLabels().join())
 check('and that is remembered too', window.localStorage.getItem('elevance.nav-collapsed') === '0')
+
+// ---------------- the theme: light, dark or the device's ----------------
+// Chosen in the account menu; remembered under one key the three apps share.
+const bodyBg = () => window.getComputedStyle(document.body).backgroundColor
+const themeButtons = () => [...document.querySelectorAll<HTMLElement>('[aria-labelledby="theme-mode-label"] button')]
+const pressed = () => themeButtons().find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent
+window.localStorage.removeItem('elevance.theme')
+await mountApp('/dashboard')
+const lightBg = bodyBg()
+await click(button('Account menu'))
+check('the account menu offers Light, Dark and System', themeButtons().map((b) => b.textContent).join() === 'Light,Dark,System',
+  themeButtons().map((b) => b.textContent).join())
+check('following the device by default', pressed() === 'System', pressed())
+await click(themeButtons().find((b) => b.textContent === 'Dark'))
+await settle()
+check('Dark is chosen', pressed() === 'Dark', pressed())
+check('the page goes dark', bodyBg() !== lightBg && bodyBg() === 'rgb(18, 19, 24)', `${lightBg} → ${bodyBg()}`)
+check('the choice is remembered, under the key the apps share', window.localStorage.getItem('elevance.theme') === 'dark')
+await mountApp('/dashboard')
+check('a fresh load opens dark', bodyBg() === 'rgb(18, 19, 24)', bodyBg())
+await click(button('Account menu'))
+await click(themeButtons().find((b) => b.textContent === 'Light'))
+await settle()
+check('Light brings it back', bodyBg() === lightBg && window.localStorage.getItem('elevance.theme') === 'light', bodyBg())
+// System follows the device: a dark device, a dark page.
+setScreen({ scheme: 'dark' })
+await click(themeButtons().find((b) => b.textContent === 'System'))
+await mountApp('/dashboard')
+check('System follows a dark device', bodyBg() === 'rgb(18, 19, 24)' && window.localStorage.getItem('elevance.theme') === 'system', bodyBg())
+setScreen({ scheme: 'light' })
+await mountApp('/dashboard')
+check('and a light one', bodyBg() === lightBg, bodyBg())
+window.localStorage.removeItem('elevance.theme')
 
 done()

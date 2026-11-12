@@ -7,7 +7,7 @@ import { CssBaseline, ThemeProvider } from '@mui/material'
 import App from '../src/App'
 import { AuthProvider } from '../src/auth/AuthProvider'
 import { clearProjectMeta } from '../src/workspace/useProjectMeta'
-import { theme } from '../src/theme'
+import { theme, themeSettings } from '../src/theme'
 import { settle } from './setup'
 
 let root: Root | null = null
@@ -29,8 +29,8 @@ export async function mountApp(path = '/') {
   document.body.innerHTML = '<div id="root"></div>'
   root = createRoot(document.getElementById('root')!)
   root.render(
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeProvider theme={theme} {...themeSettings}>
+      <CssBaseline enableColorScheme />
       <AuthProvider>
         <MemoryRouter initialEntries={[path]}>
           <LocationProbe />

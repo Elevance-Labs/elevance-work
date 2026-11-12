@@ -52,16 +52,17 @@ const listId = (sprintId: string | null) => `list:${sprintId ?? BACKLOG}`
 
 function CategoryCounts({ issues, categoryFor }: { issues: Issue[]; categoryFor: (i: Issue) => StatusCategory }) {
   const n = (c: StatusCategory) => sumPoints(issues.filter((i) => categoryFor(i) === c))
-  const chips: [StatusCategory, string, string][] = [
-    ['todo', 'grey.300', 'To do'],
-    ['in_progress', '#cce0ff', 'In progress'],
-    ['done', '#baf3db', 'Done'],
+  // Light tint, dark tint.
+  const chips: [StatusCategory, string, string, string][] = [
+    ['todo', 'grey.300', 'grey.700', 'To do'],
+    ['in_progress', '#cce0ff', '#09326c', 'In progress'],
+    ['done', '#baf3db', '#164b35', 'Done'],
   ]
   return (
     <Stack direction="row" spacing={0.5}>
-      {chips.map(([c, bg, label]) => (
+      {chips.map(([c, bg, darkBg, label]) => (
         <Tooltip key={c} title={`${label}: ${formatPoints(n(c))} points`}>
-          <Box sx={{ bgcolor: bg, borderRadius: 5, px: 0.875, fontSize: 12, fontWeight: 600, minWidth: 22, textAlign: 'center', lineHeight: '20px' }}>
+          <Box sx={{ bgcolor: (t) => (t.palette.mode === 'dark' ? darkBg : bg), borderRadius: 5, px: 0.875, fontSize: 12, fontWeight: 600, minWidth: 22, textAlign: 'center', lineHeight: '20px' }}>
             {formatPoints(n(c))}
           </Box>
         </Tooltip>
@@ -345,7 +346,7 @@ export default function Backlog() {
     const doneCount = rows.filter((i) => categoryFor(i) === 'done').length
     return (
       <Paper key={id} variant="outlined" sx={{ mb: 2, overflow: 'hidden' }} data-list={sprint?.name ?? 'Backlog'}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1, py: 1, bgcolor: 'grey.50', flexWrap: 'wrap', rowGap: 0.5 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1, py: 1, bgcolor: 'background.subtle', flexWrap: 'wrap', rowGap: 0.5 }}>
           <IconButton size="small" aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setCollapsed((c) => (open ? [...c, id] : c.filter((x) => x !== id)))}>
             {open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </IconButton>
@@ -381,7 +382,7 @@ export default function Backlog() {
           {!sprint && editable && <Button size="small" variant="outlined" onClick={createSprint}>Create sprint</Button>}
         </Stack>
         {sprint?.goal && open && (
-          <Typography variant="body2" sx={{ px: 2, pb: 1, bgcolor: 'grey.50', color: 'text.secondary' }}>{sprint.goal}</Typography>
+          <Typography variant="body2" sx={{ px: 2, pb: 1, bgcolor: 'background.subtle', color: 'text.secondary' }}>{sprint.goal}</Typography>
         )}
         {open && (
           <>
