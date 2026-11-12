@@ -26,7 +26,7 @@ import type { Profile } from '../lib/types'
 
 export function Logo({ size = 32 }: { size?: number }) {
   return (
-    <Avatar variant="rounded" sx={{ width: size, height: size, bgcolor: 'primary.main' }}>
+    <Avatar variant="rounded" sx={{ width: size, height: size, bgcolor: '#3f51b5' }}>
       <WorkIcon sx={{ fontSize: size * 0.62 }} />
     </Avatar>
   )
