@@ -60,12 +60,12 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
   const listRef = useRef<HTMLUListElement>(null)
   const text = q.trim()
 
-  // Your todos and notes, once per opening.
+  // Your todos and notes (not archived ones), once per opening.
   useEffect(() => {
     let cancelled = false
     Promise.all([
       supabase.from('todos').select('*, issue:issues(key)'),
-      supabase.from('notes').select('*').eq('owner_id', me.id),
+      supabase.from('notes').select('*').eq('owner_id', me.id).is('archived_at', null),
     ]).then(([t, n]) => {
       if (!cancelled) setLocal({
         todos: (t.data ?? []) as unknown as TodoHit[],

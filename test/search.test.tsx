@@ -158,6 +158,11 @@ check('notes are found by their text', await waitFor(() => result('note:nt-launc
 await typeInto(SEARCH, 'private')
 await waitFor(() => !result('note:nt-launch'))
 check('…only your own notes, and only todos you’re on', !text().includes('Omar private') && !text().includes('Not for Sara'))
+check('archived notes aren’t searched', captured.selects.some((s) => s.table === 'notes' &&
+  JSON.stringify(s.filters) === '[["owner_id","eq","p-sara"],["archived_at","is",null]]'))
+await typeInto(SEARCH, 'retro')
+await settle(250)
+check('…so an archived one isn’t found', !result('note:nt-old') && !text().includes('Old retro'))
 await typeInto(SEARCH, 'domain')
 check('a note on a meeting is found by its text; there are no calendar events to find',
   await waitFor(() => !!result('note:nt-standup')) && groups() === 'Notes' && !text().includes('Events'), groups())
@@ -205,7 +210,7 @@ check('…and the page underneath shows it', await waitFor(() => !!document.quer
 await shortcut('k')
 await letter('3')
 check('3, a note', dialog()?.textContent?.includes('New note'))
-await click(button('Cancel', dialog()!))
+await click(button('Close', dialog()!))
 
 await click(button('Create'))
 await waitFor(() => createChoice('note'))

@@ -1,7 +1,8 @@
 // Your note on a meeting from your Google Calendar: one per meeting (each
 // occurrence of a repeating one is its own), written in place and saved as
 // you type. The first words create it, titled after the meeting; it is an
-// ordinary note from then on (the Notes page, search), private to you.
+// ordinary note from then on (the Notes page, search), private to you. Writing
+// in it again after it was archived brings it back.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Box, Link as MuiLink, Stack, TextField, Typography } from '@mui/material'
@@ -67,7 +68,8 @@ export default function MeetingNote({ meeting, minRows = 6, autoFocus, sx }: {
       let saved: Note | null = null
       let failure: { code?: string; message: string } | null = null
       if (current) {
-        const r = await supabase.from('notes').update({ body }).eq('id', current.id).select('*').single()
+        const r = await supabase.from('notes').update({ body, ...(current.archived_at ? { archived_at: null } : {}) })
+          .eq('id', current.id).select('*').single()
         saved = r.data as Note | null
         failure = r.error
       } else {
@@ -81,7 +83,7 @@ export default function MeetingNote({ meeting, minRows = 6, autoFocus, sx }: {
         if (failure?.code === '23505') {
           const existing = await supabase.from('notes').select('*').eq('owner_id', me.id).eq('meeting_id', meeting.id).single()
           if (existing.data) {
-            const r2 = await supabase.from('notes').update({ body }).eq('id', (existing.data as Note).id).select('*').single()
+            const r2 = await supabase.from('notes').update({ body, archived_at: null }).eq('id', (existing.data as Note).id).select('*').single()
             saved = r2.data as Note | null
             failure = r2.error
           }

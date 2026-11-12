@@ -1032,6 +1032,7 @@ create unique index note_labels_owner_name_key on public.note_labels (owner_id, 
 -- shows your notes on it; pinned ones are on your dashboard. A meeting (from
 -- your own Google Calendar, which the app never stores) has at most one note
 -- of yours: its Google event id, with its title and day copied in to show.
+-- A note is archived before it can be deleted.
 create table public.notes (
   id         uuid primary key default gen_random_uuid(),
   owner_id   uuid not null references public.profiles (id) on delete cascade,
@@ -1049,6 +1050,9 @@ create table public.notes (
   meeting_id    text check (length(meeting_id) between 1 and 1024),
   meeting_title text check (length(meeting_title) <= 300),
   meeting_on    date,
+  -- Put away: off every list but the archive, never pinned; only an
+  -- archived note can be deleted (notes_delete).
+  archived_at   timestamptz,
   check (length(trim(title)) > 0 or length(trim(body)) > 0),
   constraint notes_meeting_check check (meeting_id is not null or (meeting_title is null and meeting_on is null))
 );
@@ -1572,16 +1576,24 @@ create trigger note_labels_after_delete
   for each row execute function public.note_labels_after_delete();
 
 -- Stamps the owner, keeps only their own labels and projects they can see,
--- and moves updated_at only when the title or text changes.
+-- moves updated_at only when the title or text changes, and stamps
+-- archived_at (unpinning the note).
 create function public.notes_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     new.owner_id := public.current_profile_id();
+    new.archived_at := null;
   elsif new.owner_id <> old.owner_id then
     raise exception 'A note keeps its owner.' using errcode = '42501';
   elsif new.title is distinct from old.title or new.body is distinct from old.body then
     new.updated_at := now();
+  end if;
+  -- Archived now, whatever time the client sent; an archived note stays as
+  -- it was archived, and is off the dashboard.
+  if new.archived_at is not null then
+    new.archived_at := case when tg_op = 'UPDATE' and old.archived_at is not null then old.archived_at else now() end;
+    new.pinned := false;
   end if;
   if new.project_id is not null and (tg_op = 'INSERT' or new.project_id is distinct from old.project_id)
      and auth.uid() is not null and not public.can_view_project(new.project_id) then
@@ -1824,7 +1836,7 @@ grant update (name) on public.note_labels to authenticated;
 
 grant select, delete on public.notes to authenticated;
 grant insert (title, body, color, label_ids, project_id, pinned, meeting_id, meeting_title, meeting_on) on public.notes to authenticated;
-grant update (title, body, color, label_ids, project_id, pinned, meeting_id, meeting_title, meeting_on) on public.notes to authenticated;
+grant update (title, body, color, label_ids, project_id, pinned, meeting_id, meeting_title, meeting_on, archived_at) on public.notes to authenticated;
 
 grant select, delete on public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
@@ -2063,7 +2075,7 @@ create policy notes_update on public.notes for update to authenticated
   using (owner_id = (select public.current_profile_id()))
   with check (owner_id = (select public.current_profile_id()));
 create policy notes_delete on public.notes for delete to authenticated
-  using (owner_id = (select public.current_profile_id()));
+  using (owner_id = (select public.current_profile_id()) and archived_at is not null);
 
 create policy notifications_select on public.notifications for select to authenticated
   using (recipient_id = (select public.current_profile_id()));

@@ -75,10 +75,7 @@ function NewNote({ onClose }: { onClose: () => void }) {
   if (!labels) return null
   return (
     <NoteDialog note={null} labels={labels} onLabelCreated={(l) => setLabels((ls) => [...(ls ?? []), l])} onClose={onClose}
-      onSaved={() => {
-        emitItemChange('note')
-        onClose()
-      }}
+      onSaved={() => emitItemChange('note')}
       onDeleted={onClose} />
   )
 }

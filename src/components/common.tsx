@@ -188,6 +188,7 @@ export function FormDialog({
   maxWidth = 'sm',
   extraActions,
   paperColor,
+  autosave,
   onSubmit,
   onClose,
   children,
@@ -201,6 +202,9 @@ export function FormDialog({
   extraActions?: ReactNode
   // A background for the dialog (a note takes its own colour).
   paperColor?: string
+  // A form that saves itself: this status (Saving…, Saved) stands in for
+  // Cancel and Save, and Enter or closing saves at once.
+  autosave?: ReactNode
   onSubmit: () => void
   onClose: () => void
   children: ReactNode
@@ -241,12 +245,18 @@ export function FormDialog({
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {extraActions}
         <Box sx={{ flexGrow: 1 }} />
-        <Button onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button type="submit" variant="contained" loading={busy}>
-          {submitLabel}
-        </Button>
+        {autosave !== undefined ? (
+          <Typography variant="caption" role="status" sx={{ color: 'text.secondary' }}>{autosave}</Typography>
+        ) : (
+          <>
+            <Button onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" loading={busy}>
+              {submitLabel}
+            </Button>
+          </>
+        )}
       </DialogActions>
     </Dialog>
   )

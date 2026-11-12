@@ -309,6 +309,8 @@ export interface Note {
   meeting_id: string | null
   meeting_title: string | null
   meeting_on: string | null
+  // Put away (never pinned); only an archived note can be deleted.
+  archived_at: string | null
   created_at: string
   updated_at: string
 }

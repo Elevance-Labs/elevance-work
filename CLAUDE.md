@@ -127,7 +127,7 @@ behaviour).
 | `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
-| `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (pin; unlink a meeting), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
+| `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
 | `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note-changed bus). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
@@ -143,7 +143,7 @@ behaviour).
 - No session → `Login` (Google only). After binding, everything sits inside
   `WorkspaceProvider` and `Layout`.
 - `/dashboard` (landing), `/issues` (filters in the URL), `/calendar`
-  (`?view=day|week&date=`, or `?month=`; week by default), `/todos`, `/notes` (`?q=&label=&color=&project=`; `?note=ID` opens one), `/projects`,
+  (`?view=day|week&date=`, or `?month=`; week by default), `/todos`, `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one), `/projects`,
   `/browse/:key` — everyone.
 - `/projects/:key` → Summary; `/backlog` (Scrum only; Kanban redirects to
   board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`, `/releases`, `/releases/:releaseId`,
@@ -251,7 +251,8 @@ Full detail in `supabase/schema.sql`.
   (an issue's todo takes the issue's project); `saved_filters` — private or shared;
   `notes` + `note_labels` — private to the owner even from admins; `notes_guard`
   stamps the owner, keeps only own labels and visible projects, and moves
-  `updated_at` only on title / text; `pinned`; a meeting link is a Google event
+  `updated_at` only on title / text, stamps `archived_at` (and unpins);
+  `pinned`; deleted only once archived (the delete policy); a meeting link is a Google event
   id (one note per person per meeting) with its title and day copied in;
   `notifications` — per recipient, only `read_at` writable; kinds include
   `test`; `push_subscriptions` — a person's devices (endpoint, keys, label),

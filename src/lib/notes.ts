@@ -2,7 +2,8 @@
 // matching loaded notes against it. Notes are private to their owner, so a
 // person's whole set is loaded and filtered here, not in the query. A note
 // may be pinned (the dashboard shows those) and may be about one meeting from
-// your Google Calendar.
+// your Google Calendar. A note is archived before it can be deleted: the
+// archive is its own view of the same list.
 import { formatDate } from './constants'
 import type { Note, NoteColor, NoteLabel } from './types'
 
@@ -43,9 +44,11 @@ export interface NoteFilter {
   color: NoteColor | ''
   // A project's id, or '' for any.
   project: string
+  // The archive instead of the current notes.
+  archived: boolean
 }
 
-export const EMPTY_NOTE_FILTER: NoteFilter = { text: '', label: '', color: '', project: '' }
+export const EMPTY_NOTE_FILTER: NoteFilter = { text: '', label: '', color: '', project: '', archived: false }
 
 export function noteFilterFromParams(params: URLSearchParams): NoteFilter {
   const color = params.get('color') ?? ''
@@ -54,6 +57,7 @@ export function noteFilterFromParams(params: URLSearchParams): NoteFilter {
     label: params.get('label') ?? '',
     color: (NOTE_COLOR_KEYS as string[]).includes(color) ? (color as NoteColor) : '',
     project: params.get('project') ?? '',
+    archived: params.get('archived') === '1',
   }
 }
 
@@ -63,9 +67,11 @@ export function noteFilterToParams(filter: NoteFilter) {
   if (filter.label) params.set('label', filter.label)
   if (filter.color) params.set('color', filter.color)
   if (filter.project) params.set('project', filter.project)
+  if (filter.archived) params.set('archived', '1')
   return params
 }
 
+/** Nothing narrows the view (current or archived) it is on. */
 export const isNoteFilterEmpty = (f: NoteFilter) => !f.text.trim() && !f.label && !f.color && !f.project
 
 /**
@@ -77,6 +83,7 @@ export function matchesNote(
   filter: NoteFilter,
   ctx: { labels: Map<string, NoteLabel>; projectName: (id: string | null) => string | undefined },
 ) {
+  if (!!note.archived_at !== filter.archived) return false
   if (filter.color && note.color !== filter.color) return false
   if (filter.project && note.project_id !== filter.project) return false
   const labelNames = note.label_ids.map((id) => ctx.labels.get(id)?.name).filter((n): n is string => !!n)

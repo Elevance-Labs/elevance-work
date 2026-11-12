@@ -182,7 +182,7 @@ const NOTE_LABELS: Row[] = [
 
 const note = (id: string, owner_id: string, title: string, body: string, extra: Row = {}): Row => ({
   id, owner_id, title, body, color: 'yellow', label_ids: [], project_id: null, pinned: false, meeting_id: null, meeting_title: null,
-  meeting_on: null, created_at: at('2026-10-10'), updated_at: at('2026-10-10'), ...extra,
+  meeting_on: null, archived_at: null, created_at: at('2026-10-10'), updated_at: at('2026-10-10'), ...extra,
 })
 
 const NOTES: Row[] = [
@@ -192,6 +192,7 @@ const NOTES: Row[] = [
     meeting_title: 'Standup', meeting_on: '2026-10-19', updated_at: at('2026-10-19', '10:20') }),
   note('nt-gifts', 'p-sara', 'Gift ideas', 'Books for Hina', { color: 'green', label_ids: ['nl-personal'], updated_at: at('2026-10-15') }),
   note('nt-omar', 'p-omar', 'Omar private', 'Not for Sara', { project_id: 'pr-web' }),
+  note('nt-old', 'p-sara', 'Old retro', 'Went fine', { project_id: 'pr-web', archived_at: at('2026-10-12'), updated_at: at('2026-10-11') }),
 ]
 
 const NOTIFICATIONS: Row[] = [
@@ -282,7 +283,7 @@ function insertDefaults(table: string, row: Row): Row {
       return { ...row, owner_id: me()?.id }
     case 'notes':
       return { title: '', body: '', color: 'yellow', label_ids: [], project_id: null, pinned: false, meeting_id: null, meeting_title: null,
-        meeting_on: null, ...row, owner_id: me()?.id, updated_at: now }
+        meeting_on: null, ...row, owner_id: me()?.id, updated_at: now, archived_at: null }
     case 'releases':
       return { description: '', start_date: null, release_date: null, status: 'unreleased', released_at: null, ...row, created_by: me()?.id }
     case 'documents':
@@ -311,6 +312,8 @@ function updateEffects(table: string, row: Row, values: Row) {
   if (table === 'comments') row.edited_at = new Date().toISOString()
   if (table === 'notes' && ('title' in values || 'body' in values)) row.updated_at = new Date().toISOString()
   if (table === 'notes' && 'meeting_id' in values && !values.meeting_id) Object.assign(row, { meeting_title: null, meeting_on: null })
+  // notes_guard: an archived note is never pinned.
+  if (table === 'notes' && row.archived_at) row.pinned = false
   if (table === 'todos' && values.issue_id) row.project_id = find('issues', values.issue_id)?.project_id ?? null
   if (table === 'releases' && 'status' in values) row.released_at = values.status === 'released' ? new Date().toISOString() : null
 }

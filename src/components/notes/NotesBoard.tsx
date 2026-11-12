@@ -1,7 +1,9 @@
 // Your notes as sticky notes: the notes page (every note, with search and
 // filters), a project's notes tab, and the dashboard's pinned notes all use
 // this, scoped to what they show. Pinned notes come first. Notes are private (RLS), so the query
-// is only ever for your own; the filters run on what is loaded.
+// is only ever for your own; the filters run on what is loaded. Archived
+// notes are their own view (the toolbar's Archived), where they are restored
+// or deleted; nowhere else shows them.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -17,6 +19,7 @@ import {
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined'
 import PushPinIcon from '@mui/icons-material/PushPin'
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
@@ -157,7 +160,9 @@ export default function NotesBoard({
   const projectName = (id: string | null) => projectById(id)?.name
   if (!notes) return compact ? null : <Loading />
 
-  const shown = notes.filter((n) => matchesNote(n, filter, { labels: labelMap, projectName }))
+  const archive = filter.archived
+  const inView = notes.filter((n) => !!n.archived_at === archive)
+  const shown = inView.filter((n) => matchesNote(n, filter, { labels: labelMap, projectName }))
   const defaults: NoteDefaults = { project_id: projectId ?? null, pinned: !!pinned }
   const hide = { project: !!projectId }
 
@@ -165,7 +170,6 @@ export default function NotesBoard({
     // A note moved off this project, or unpinned from the dashboard, leaves its list.
     const inScope = (!projectId || note.project_id === projectId) && (!pinned || note.pinned)
     setNotes((ns) => [...(inScope ? [note] : []), ...(ns ?? []).filter((n) => n.id !== note.id)].sort(byPinnedThenRecent))
-    setOpen(null)
   }
   const deleted = (id: string) => {
     setNotes((ns) => (ns ?? []).filter((n) => n.id !== id))
@@ -214,12 +218,16 @@ export default function NotesBoard({
             {projects.filter((p) => !p.archived_at || p.id === filter.project).map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
           </TextField>
         )}
-        {!isNoteFilterEmpty(filter) && <Button onClick={() => setFilter(EMPTY_NOTE_FILTER)}>Clear</Button>}
+        {!isNoteFilterEmpty(filter) && <Button onClick={() => setFilter({ ...EMPTY_NOTE_FILTER, archived: archive })}>Clear</Button>}
       </Stack>
       <Box sx={{ flexGrow: 1 }} />
       <Stack direction="row" spacing={1}>
+        <Button startIcon={<ArchiveOutlinedIcon />} variant={archive ? 'outlined' : 'text'} aria-pressed={archive}
+          onClick={() => setFilter({ archived: !archive })}>
+          Archived
+        </Button>
         <Button startIcon={<LabelOutlinedIcon />} onClick={() => setManaging(true)}>Labels</Button>
-        {newButton}
+        {!archive && newButton}
       </Stack>
     </Stack>
   )
@@ -238,7 +246,11 @@ export default function NotesBoard({
           <Box sx={{ mt: 1 }}>{shown.map((n) => <NoteCard key={n.id} note={n} labels={labelMap} hide={hide} onOpen={() => setOpen({ note: n })} />)}</Box>
           {newButton}
         </>
-      ) : notes.length === 0 ? (
+      ) : archive && inView.length === 0 ? (
+        <EmptyState icon={<ArchiveOutlinedIcon />} title="Nothing archived">
+          Archive a note to put it away. Archived notes can be restored, or deleted for good.
+        </EmptyState>
+      ) : inView.length === 0 ? (
         <EmptyState icon={<StickyNote2OutlinedIcon />} title="No notes yet">
           {projectId ? 'Notes you link to this project show here.' : 'Jot something down.'} Only you can see your notes.
         </EmptyState>

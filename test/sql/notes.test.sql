@@ -1,5 +1,5 @@
 -- Notes and note labels: private to their owner, labels per person, links to
--- projects and Google Calendar meetings, pinning.
+-- projects and Google Calendar meetings, pinning, archiving before deleting.
 
 -- ---------------- labels ----------------
 select t.login('sara');
@@ -101,3 +101,31 @@ update public.notes set meeting_id = null where body = 'Standup notes';
 select t.eq('unlinking a meeting drops its title and day',
   (select coalesce(meeting_title, 'none') || ':' || coalesce(meeting_on::text, 'none') from public.notes where body = 'Standup notes'),
   'none:none');
+
+-- ---------------- archiving, then deleting ----------------
+select t.login('sara');
+update public.notes set pinned = true where title = 'Launch plan';
+select t.eq('a note that isn''t archived can''t be deleted', t.rows($$delete from public.notes where title = 'Launch plan'$$), 0::bigint);
+select t.throws('a note is never written archived',
+  $$insert into public.notes (body, archived_at) values ('x', now())$$, '42501');
+
+update public.notes set archived_at = '2000-01-01' where title = 'Launch plan';
+select t.ok('archiving stamps the time, not the one sent',
+  (select archived_at > now() - interval '1 minute' from public.notes where title = 'Launch plan'));
+select t.eq('…and unpins it', (select pinned from public.notes where title = 'Launch plan'), false);
+update public.notes set pinned = true where title = 'Launch plan';
+select t.eq('an archived note can''t be pinned', (select pinned from public.notes where title = 'Launch plan'), false);
+select set_config('test.archived_at', (select archived_at::text from public.notes where title = 'Launch plan'), false);
+update public.notes set archived_at = now() + interval '1 day', body = 'Pricing, later.' where title = 'Launch plan';
+select t.eq('…and stays archived as it was, though it can still be edited',
+  (select archived_at from public.notes where title = 'Launch plan'), current_setting('test.archived_at')::timestamptz);
+
+select t.login('amna');
+select t.eq('…not even admins can delete someone''s archived note', t.rows($$delete from public.notes$$), 0::bigint);
+
+select t.login('sara');
+update public.notes set archived_at = null where title = 'Launch plan';
+select t.eq('restoring brings it back', (select archived_at is null from public.notes where title = 'Launch plan'), true);
+select t.eq('…where it can''t be deleted again', t.rows($$delete from public.notes where title = 'Launch plan'$$), 0::bigint);
+update public.notes set archived_at = now() where title = 'Launch plan';
+select t.eq('an archived note can be deleted', t.rows($$delete from public.notes where title = 'Launch plan'$$), 1::bigint);

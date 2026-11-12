@@ -253,7 +253,7 @@ check('…as plain text to paste', notesText('Site', { name: 'v1', release_date:
 const { matchesNote, noteFilterFromParams, noteFilterToParams, noteHeading, meetingLabel, EMPTY_NOTE_FILTER } = await import('../src/lib/notes')
 type NoteRow = import('../src/lib/notes').NoteRow
 const aNote = (extra: Partial<NoteRow>): NoteRow => ({ id: 'n', owner_id: 'me', title: '', body: '', color: 'yellow', label_ids: [],
-  project_id: null, pinned: false, meeting_id: null, meeting_title: null, meeting_on: null, created_at: '', updated_at: '', ...extra })
+  project_id: null, pinned: false, meeting_id: null, meeting_title: null, meeting_on: null, archived_at: null, created_at: '', updated_at: '', ...extra })
 const noteCtx = { labels: new Map([['l1', { id: 'l1', owner_id: 'me', name: 'Clients', created_at: '' }]]),
   projectName: (id: string | null) => (id === 'pw' ? 'Website' : undefined) }
 const match = (n: NoteRow, f: Partial<typeof EMPTY_NOTE_FILTER>) => matchesNote(n, { ...EMPTY_NOTE_FILTER, ...f }, noteCtx)
@@ -264,6 +264,11 @@ check('note search: every word, any case, across text, labels, project and meeti
 check('note filters: label, no label (ignoring removed ones), colour, project',
   match(n1, { label: 'l1' }) && !match(n1, { label: 'none' }) && match(aNote({ label_ids: ['gone'] }), { label: 'none' }) &&
   !match(n1, { color: 'blue' }) && match(n1, { project: 'pw' }) && !match(n1, { project: 'other' }))
+const archivedNote = aNote({ body: 'Old', archived_at: '2026-10-22T00:00:00Z' })
+check('archived notes are only in the archive, which holds nothing else',
+  !match(archivedNote, {}) && match(archivedNote, { archived: true, text: 'old' }) && !match(n1, { archived: true }))
+check('the archive is in the address', noteFilterToParams({ ...EMPTY_NOTE_FILTER, archived: true }).toString() === 'archived=1' &&
+  noteFilterFromParams(new URLSearchParams('archived=1')).archived)
 const parsed = noteFilterFromParams(new URLSearchParams('q=a+b&label=l1&color=neon&project=pw'))
 check('note filters in the address drop a colour that doesn’t exist, and round-trip',
   parsed.color === '' && parsed.text === 'a b' && noteFilterToParams(parsed).toString() === 'q=a+b&label=l1&project=pw')
