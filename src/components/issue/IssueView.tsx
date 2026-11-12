@@ -22,6 +22,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
@@ -139,6 +141,10 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   const [copied, setCopied] = useState(false)
   const [typeAnchor, setTypeAnchor] = useState<HTMLElement | null>(null)
   const [parentAnchor, setParentAnchor] = useState<HTMLElement | null>(null)
+  // On a phone the dialog is already full screen (IssueDialog's breakpoint):
+  // no "open as a page", and the header takes two rows.
+  const theme = useTheme()
+  const phone = useMediaQuery(theme.breakpoints.down('md'))
 
   const reload = useCallback(async () => {
     setData(await loadIssue(issueKey))
@@ -266,58 +272,86 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
     return save({ custom: next })
   }
 
-  const header = (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 40 }}>
-      <Breadcrumbs sx={{ flexGrow: 1, minWidth: 0, '& ol': { flexWrap: 'nowrap' } }}>
-        <MuiLink component={Link} to={`/projects/${project.key}`} underline="hover" color="text.secondary"
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <ProjectAvatar project={project} size={20} />
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{project.name}</Box>
+  const projectLink = (
+    <MuiLink component={Link} to={`/projects/${project.key}`} underline="hover" color="text.secondary"
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+      <ProjectAvatar project={project} size={20} />
+      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</Box>
+    </MuiLink>
+  )
+
+  // The epic (or parent) and the issue's own key.
+  const trail = [
+    data.parent ? (
+      <Stack key="parent" direction="row" sx={{ alignItems: 'center', '&:hover .change-parent, & .change-parent:focus-visible': { opacity: 1 } }}>
+        <MuiLink component={Link} to={{ search: `?issue=${data.parent.key}` }} underline="hover" color="text.secondary"
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <TypeIcon type={typeById(data.parent.type_id)} size={16} />
+          {data.parent.key}
         </MuiLink>
-        {data.parent ? (
-          <Stack direction="row" sx={{ alignItems: 'center', '&:hover .change-parent, & .change-parent:focus-visible': { opacity: 1 } }}>
-            <MuiLink component={Link} to={{ search: `?issue=${data.parent.key}` }} underline="hover" color="text.secondary"
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <TypeIcon type={typeById(data.parent.type_id)} size={16} />
-              {data.parent.key}
-            </MuiLink>
-            {editable && parentLevel && (
-              <Tooltip title={`Change ${parentWord}`}>
-                <IconButton size="small" className="change-parent" aria-label={`Change ${parentWord}`}
-                  onClick={(e) => setParentAnchor(e.currentTarget)}
-                  sx={{ ml: 0.25, p: 0.25, opacity: { xs: 1, md: 0 }, transition: 'opacity 120ms' }}>
-                  <EditOutlinedIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Stack>
-        ) : (
-          editable && parentLevel === 'epic' && (
-            <Button size="small" color="inherit" startIcon={<TypeIcon type={issueTypes.find((t) => t.level === 'epic')} size={16} tooltip={false} />}
-              onClick={(e) => setParentAnchor(e.currentTarget)} sx={{ color: 'text.secondary', minWidth: 0, py: 0, whiteSpace: 'nowrap' }}>
-              Add epic
-            </Button>
-          )
-        )}
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          {editable && sameLevelTypes.length > 1 ? (
-            <Tooltip title={`${type?.name ?? 'Issue'}: change type`}>
-              <IconButton size="small" aria-label="Change type" aria-haspopup="menu" onClick={(e) => setTypeAnchor(e.currentTarget)}
-                sx={{ p: 0.25, borderRadius: 1 }}>
-                <TypeIcon type={type} size={16} tooltip={false} />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <TypeIcon type={type} size={16} />
-          )}
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>{issue.key}</Typography>
-          <Tooltip title={copied ? 'Link copied' : 'Copy link'}>
-            <IconButton size="small" aria-label="Copy link" onClick={copyLink} sx={{ p: 0.25 }}>
-              {copied ? <CheckIcon color="success" sx={{ fontSize: 16 }} /> : <LinkIcon sx={{ fontSize: 16 }} />}
+        {editable && parentLevel && (
+          <Tooltip title={`Change ${parentWord}`}>
+            <IconButton size="small" className="change-parent" aria-label={`Change ${parentWord}`}
+              onClick={(e) => setParentAnchor(e.currentTarget)}
+              sx={{ ml: 0.25, p: 0.25, opacity: { xs: 1, md: 0 }, transition: 'opacity 120ms' }}>
+              <EditOutlinedIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
-        </Stack>
-      </Breadcrumbs>
+        )}
+      </Stack>
+    ) : (
+      editable && parentLevel === 'epic' && (
+        <Button key="parent" size="small" color="inherit" startIcon={<TypeIcon type={issueTypes.find((t) => t.level === 'epic')} size={16} tooltip={false} />}
+          onClick={(e) => setParentAnchor(e.currentTarget)} sx={{ color: 'text.secondary', minWidth: 0, py: 0, whiteSpace: 'nowrap' }}>
+          Add epic
+        </Button>
+      )
+    ),
+    <Stack key="issue" direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+      {editable && sameLevelTypes.length > 1 ? (
+        <Tooltip title={`${type?.name ?? 'Issue'}: change type`}>
+          <IconButton size="small" aria-label="Change type" aria-haspopup="menu" onClick={(e) => setTypeAnchor(e.currentTarget)}
+            sx={{ p: 0.25, borderRadius: 1 }}>
+            <TypeIcon type={type} size={16} tooltip={false} />
+          </IconButton>
+        </Tooltip>
+      ) : (
+        <TypeIcon type={type} size={16} />
+      )}
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>{issue.key}</Typography>
+      <Tooltip title={copied ? 'Link copied' : 'Copy link'}>
+        <IconButton size="small" aria-label="Copy link" onClick={copyLink} sx={{ p: 0.25 }}>
+          {copied ? <CheckIcon color="success" sx={{ fontSize: 16 }} /> : <LinkIcon sx={{ fontSize: 16 }} />}
+        </IconButton>
+      </Tooltip>
+    </Stack>,
+  ]
+
+  const actions = (
+    <>
+      <Tooltip title={watching ? 'Stop watching' : 'Watch: hear about every change'}>
+        <Button size="small" color="inherit" startIcon={watching ? <VisibilityIcon /> : <VisibilityOutlinedIcon />} onClick={toggleWatch}
+          aria-pressed={watching} aria-label={watching ? 'Stop watching' : 'Watch'}>
+          {data.watchers.length}
+        </Button>
+      </Tooltip>
+      {onClose && !phone && (
+        <Tooltip title="Open as a page">
+          <IconButton aria-label="Open as a page" component={Link} to={issuePath(issue.key)}><OpenInFullIcon fontSize="small" /></IconButton>
+        </Tooltip>
+      )}
+      {can.deleteIssues(role) && (
+        <>
+          <IconButton aria-label="More actions" onClick={(e) => setMenu(e.currentTarget)}><MoreHorizIcon /></IconButton>
+          <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
+            <MenuItem onClick={() => { setMenu(null); setDeleting(true) }} sx={{ color: 'error.main' }}>
+              <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+              Delete issue
+            </MenuItem>
+          </Menu>
+        </>
+      )}
+      {onClose && <IconButton aria-label="Close" onClick={onClose}><CloseIcon /></IconButton>}
       <Menu anchorEl={typeAnchor} open={!!typeAnchor} onClose={() => setTypeAnchor(null)}>
         <Typography variant="caption" component="div" sx={{ px: 2, py: 0.5, color: 'text.secondary', fontWeight: 600 }}>
           Change type
@@ -346,29 +380,27 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
           )}
         </Box>
       </Popover>
-      <Tooltip title={watching ? 'Stop watching' : 'Watch: hear about every change'}>
-        <Button size="small" color="inherit" startIcon={watching ? <VisibilityIcon /> : <VisibilityOutlinedIcon />} onClick={toggleWatch}
-          aria-pressed={watching} aria-label={watching ? 'Stop watching' : 'Watch'}>
-          {data.watchers.length}
-        </Button>
-      </Tooltip>
-      {onClose && (
-        <Tooltip title="Open as a page">
-          <IconButton aria-label="Open as a page" component={Link} to={issuePath(issue.key)}><OpenInFullIcon fontSize="small" /></IconButton>
-        </Tooltip>
-      )}
-      {can.deleteIssues(role) && (
-        <>
-          <IconButton aria-label="More actions" onClick={(e) => setMenu(e.currentTarget)}><MoreHorizIcon /></IconButton>
-          <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
-            <MenuItem onClick={() => { setMenu(null); setDeleting(true) }} sx={{ color: 'error.main' }}>
-              <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
-              Delete issue
-            </MenuItem>
-          </Menu>
-        </>
-      )}
-      {onClose && <IconButton aria-label="Close" onClick={onClose}><CloseIcon /></IconButton>}
+    </>
+  )
+
+  // A phone: the project and the actions on top, the epic / issue below.
+  // Wider: one row, the project leading the breadcrumb.
+  const header = phone ? (
+    // The top row's 40px buttons already leave room above the trail; match it below.
+    <Stack sx={{ mb: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 40 }}>
+        <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex' }}>{projectLink}</Box>
+        {actions}
+      </Stack>
+      <Breadcrumbs sx={{ minWidth: 0, '& ol': { flexWrap: 'nowrap' } }}>{trail}</Breadcrumbs>
+    </Stack>
+  ) : (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 40 }}>
+      <Breadcrumbs sx={{ flexGrow: 1, minWidth: 0, '& ol': { flexWrap: 'nowrap' } }}>
+        {projectLink}
+        {trail}
+      </Breadcrumbs>
+      {actions}
     </Stack>
   )
 

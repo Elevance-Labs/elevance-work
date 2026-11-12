@@ -3,7 +3,7 @@
 // (through the drive function), and deleting.
 import {
   setupDom, reporter, text, button, click, dialog, type, typeInto, choose, labelled, submit, settleLazy, write, pickFile, menuItem,
-  freezeToday, settle, waitFor,
+  freezeToday, settle, waitFor, setScreen,
 } from './setup'
 setupDom()
 
@@ -96,6 +96,7 @@ await mountApp('/projects/WEB/issues?issue=WEB-2')
 await settleLazy()
 check('?issue=KEY opens the issue over the page', dialog()?.textContent?.includes('Hero banner') && location.pathname === '/projects/WEB/issues')
 check('…with its parent epic in the breadcrumb', dialog()?.textContent?.includes('WEB-1'))
+check('…with a way to open it as a page', !!dialog()?.querySelector('[aria-label="Open as a page"]'))
 check('…its sub-task', dialog()?.textContent?.includes('Headline copy'))
 check('…and its comment', dialog()?.textContent?.includes('Use the new photo'))
 check('…your todos on it, and the ones you were put on', await waitFor(() => !!document.querySelector('[data-todo="td-2"]')) &&
@@ -245,5 +246,23 @@ signInAs(PEOPLE.member)
 await mountApp('/browse/WEB-99')
 await settleLazy()
 check('an unknown key says so', text().includes("WEB-99 doesn't exist, or you don't have access"))
+
+// ---------------- the issue view on a phone ----------------
+// The dialog is full screen already: no "open as a page"; the project and the
+// actions share the top row, the epic and the issue's key sit beneath.
+reset()
+signInAs(PEOPLE.member)
+setScreen({ width: 390 })
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+const phoneDialog = dialog()!
+const topRow = phoneDialog.querySelector('[aria-label="Close"]')?.parentElement
+check('on a phone the issue has no "open as a page"', !phoneDialog.querySelector('[aria-label="Open as a page"]'))
+check('…the project shares the top row with the actions', !!topRow?.textContent?.includes('Website') &&
+  !!topRow?.querySelector('[aria-label="Watch"], [aria-label="Stop watching"]') && !topRow?.querySelector('nav'))
+const trail = phoneDialog.querySelector('nav')
+check('…and the epic and the key are the row beneath', !!trail?.textContent?.includes('WEB-1') && !!trail?.textContent?.includes('WEB-2') &&
+  !trail?.textContent?.includes('Website'))
+setScreen({ width: 1280 })
 
 done()
