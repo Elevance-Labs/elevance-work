@@ -5,6 +5,7 @@ import {
 import AppsIcon from '@mui/icons-material/Apps'
 import { PeopleIcon, SupportIcon, WorkIcon } from './ElevanceIcons'
 import { COMPANY_DOMAIN } from '../lib/constants'
+import { useStandalone } from './useStandalone'
 import { suiteLinks, switchUrl, type SuiteAppId } from '../lib/suite'
 
 const LOOK: Record<SuiteAppId, { icon: typeof AppsIcon; color: string }> = {
@@ -26,11 +27,16 @@ const OVERRIDES = {
  * Each entry is a plain link that carries the signed-in person's company
  * email, so the app it opens can sign them in through Google without asking
  * (see `lib/suite`). The app you are in is listed, marked, and goes nowhere.
+ * Not shown when the app runs installed: a link would leave its window for
+ * a browser tab, so each installed app stays on its own.
  */
 export default function AppSwitcher({ current, email }: { current: SuiteAppId; email: string | null | undefined }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const standalone = useStandalone()
   const base = new URL(import.meta.env.BASE_URL, window.location.href).href
   const links = suiteLinks(current, base, OVERRIDES)
+
+  if (standalone) return null
 
   return (
     <>

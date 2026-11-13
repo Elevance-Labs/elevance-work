@@ -88,6 +88,15 @@ check('the others are links to the sibling apps, carrying the signed-in email',
 check('by default those are the folders beside this one',
   suiteLinks('work', 'http://localhost/elevance-work/').filter((l) => !l.current).every((l) => /^http:\/\/localhost\/elevance-(work|support|people)\/$/.test(l.url)))
 
+// Installed, each app keeps to its own window: no way out to a sibling.
+setScreen({ displayMode: 'standalone' })
+await mountApp('/dashboard')
+check('running installed, there is no switcher',
+  document.querySelector('[aria-label="Switch app"]') === null && document.querySelector('[aria-label="Account menu"]') !== null)
+setScreen({ displayMode: 'browser' })
+await mountApp('/dashboard')
+check('back in a browser tab, it returns', document.querySelector('[aria-label="Switch app"]') !== null)
+
 // ---------------- the shell: one header, one collapsible navigation ----------------
 // The three apps wear the same shell, so switching does not rearrange the screen.
 const toolbar = [...(document.querySelector('header .MuiToolbar-root')?.children ?? [])]

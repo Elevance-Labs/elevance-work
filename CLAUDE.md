@@ -106,7 +106,7 @@ behaviour).
 - **One of three apps.** `lib/suite.ts` lists the suite (Work, Support,
   People), where each lives (the sibling folder, or `VITE_SUITE_*_URL`) and the
   `?sso=<company email>` hand-over; `components/AppSwitcher` is the grid icon
-  before the logo. `AuthProvider` takes the hint once at load, strips it from
+  before the logo, hidden when running installed (`components/useStandalone`). `AuthProvider` takes the hint once at load, strips it from
   the address and, with no session, goes to Google with `login_hint` and no
   chooser. The hint is never trusted: binding decides who gets in.
 - **Installable (PWA).** `vite.pwa.ts` (build plugin, no dependency) emits
