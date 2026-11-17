@@ -87,8 +87,8 @@ await click(button('New note'))
 await typeInto('Title', 'Retro', dialog()!)
 await typeInto('Note', 'Went well: the launch', dialog()!)
 check('not on every keystroke', !captured.inserts.some((i) => i.table === 'notes'))
-check('…but a moment after you stop', await waitFor(() => captured.inserts.some((i) => i.table === 'notes'), 3000) &&
-  !!dialog()?.textContent?.includes('Saved'))
+check('…but a moment after you stop', await waitFor(() => captured.inserts.some((i) => i.table === 'notes') &&
+  !!dialog()?.textContent?.includes('Saved'), 5000))
 const plain = captured.inserts.find((i) => i.table === 'notes')?.rows[0]
 check('a note is saved, yellow, unlinked', plain?.title === 'Retro' && plain.body === 'Went well: the launch' && plain.color === 'yellow' &&
   JSON.stringify(plain.label_ids) === '[]' && plain.project_id === null && plain.pinned === false && !('meeting_id' in plain), JSON.stringify(plain))
@@ -126,6 +126,8 @@ check('opening a note shows it to edit', dialog()?.textContent?.includes('Edit n
   labelled<HTMLInputElement>('Title', dialog()!)?.value === 'Launch plan')
 await typeInto('Title', 'Launch plan v2', dialog()!)
 await click(button('Close', dialog()!))
+// Closing saves first, then closes: wait for it before opening the next.
+await waitFor(() => !dialog(), 5000)
 const edit = captured.updates.find((u) => u.table === 'notes' && u.values.title === 'Launch plan v2')
 check('changes are saved to that note', edit?.values.title === 'Launch plan v2' && JSON.stringify(edit.filters) === '[["id","eq","nt-launch"]]',
   JSON.stringify(edit))
