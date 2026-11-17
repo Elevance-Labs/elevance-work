@@ -134,7 +134,9 @@ behaviour).
   own folder (sibling apps share the origin). It also shows pushes (always a
   notification: Safari revokes silent ones), sets the icon badge, and a tap
   only ever opens a page of this app. Icons in `public/icons/` (incl.
-  `badge-96.png`, the status-bar silhouette).
+  `badge-96.png`, the status-bar silhouette). `index.html`'s viewport keeps
+  `viewport-fit=cover` (without it iOS reports every safe-area inset as 0);
+  fixed bars and sheets pad with `env(safe-area-inset-*)`.
 - **The built page locks itself down.** CSP is added at build time
   (`vite.config.ts`); the app refuses to run framed (`main.tsx`). New external
   hosts go in that policy; `script-src` is never widened. No `console` in `src/`.

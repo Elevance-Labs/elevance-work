@@ -44,7 +44,9 @@ export default function BottomNav() {
       elevation={0}
       sx={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: (t) => t.zIndex.appBar,
-        borderTop: 1, borderColor: 'divider', pb: 'env(safe-area-inset-bottom)',
+        borderTop: 1, borderColor: 'divider',
+        // Clear of the home indicator, and of the notch when on its side.
+        pb: 'env(safe-area-inset-bottom)', pl: 'env(safe-area-inset-left)', pr: 'env(safe-area-inset-right)',
       }}
     >
       <BottomNavigation showLabels value={bottomTabOf(pathname)} sx={{ height: BOTTOM_NAV_HEIGHT, bgcolor: 'transparent' }}>

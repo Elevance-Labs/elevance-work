@@ -65,6 +65,10 @@ const NotificationSettings = lazy(() => import('./NotificationSettings'))
 const DRAWER_WIDTH = 248
 // Collapsed, the navigation is a rail just wide enough for its icons.
 const RAIL_WIDTH = 68
+/** A width plus the left safe-area inset (non-zero only on a notched phone on its side). */
+const withLeftInset = (px: number) => `calc(${px}px + env(safe-area-inset-left))`
+/** Keeps a full-width fixed bar's contents clear of the notch on a phone on its side. */
+const SAFE_SIDES = { pl: 'env(safe-area-inset-left)', pr: 'env(safe-area-inset-right)' }
 
 interface NavItem {
   to: string
@@ -241,7 +245,7 @@ export default function Layout() {
   return (
     <LayoutContext.Provider value={actions}>
       <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-        <AppBar position="fixed" color="inherit" elevation={0} sx={{ zIndex: theme.zIndex.drawer + 1, borderBottom: 1, borderColor: 'divider' }}>
+        <AppBar position="fixed" color="inherit" elevation={0} sx={{ zIndex: theme.zIndex.drawer + 1, borderBottom: 1, borderColor: 'divider', ...SAFE_SIDES }}>
           <Toolbar sx={{ gap: { xs: 0.75, sm: 1.5 } }}>
             {!desktop && (
               <IconButton edge="start" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
@@ -347,8 +351,9 @@ export default function Layout() {
           variant={desktop ? 'permanent' : 'temporary'}
           open={desktop || mobileOpen}
           onClose={() => setMobileOpen(false)}
-          sx={{ width: navWidth, flexShrink: 0 }}
-          slotProps={{ paper: { sx: { width: desktop ? navWidth : DRAWER_WIDTH, boxSizing: 'border-box', overflowX: 'hidden' } } }}
+          // Widened by the notch's inset when a phone is on its side, so the rail keeps its room.
+          sx={{ width: withLeftInset(navWidth), flexShrink: 0 }}
+          slotProps={{ paper: { sx: { width: withLeftInset(desktop ? navWidth : DRAWER_WIDTH), boxSizing: 'border-box', overflowX: 'hidden', pl: 'env(safe-area-inset-left)' } } }}
         >
           {drawer}
         </Drawer>
@@ -360,6 +365,9 @@ export default function Layout() {
           // would be overridden by `p`'s xs padding and leave the end of the
           // page behind the bar.
           pb: { xs: `calc(${BOTTOM_NAV_HEIGHT + 16}px + env(safe-area-inset-bottom))`, md: 3 },
+          // A phone on its side: clear of the notch (beside the drawer from md).
+          pl: { xs: 'calc(16px + env(safe-area-inset-left))', md: 3 },
+          pr: { xs: 'calc(16px + env(safe-area-inset-right))', md: 'calc(24px + env(safe-area-inset-right))' },
         }}>
           <Toolbar />
           <Outlet />

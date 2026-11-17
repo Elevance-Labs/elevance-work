@@ -1,6 +1,7 @@
 // Getting around: the Work page (your projects, your issues, recent activity
 // on what you watch), saved filters pinned to the navigation, and on a phone
 // the bottom bar and the compact Home.
+import { readFileSync } from 'node:fs'
 import { setupDom, reporter, text, button, click, navLabels, freezeToday, waitFor, setScreen, labelled, typeInto, settle } from './setup'
 setupDom()
 
@@ -28,7 +29,7 @@ check('…asking only for yours, unresolved', captured.selects.some((s) => s.tab
 
 await click(tab('Recent activity'))
 check('Recent activity is kept in the address', await waitFor(() => location.search === '?tab=activity'), location.search)
-check('…read with watched_activity', captured.rpcs.some((r) => r.name === 'watched_activity'))
+check('…read with watched_activity', await waitFor(() => captured.rpcs.some((r) => r.name === 'watched_activity')))
 const activity = () => document.querySelector('[data-activity]')?.textContent ?? ''
 check('…listing the issues you watch, with who last did what', await waitFor(() => activity().includes('WEB-2') &&
   activity().includes('Amna Khan commented')), activity())
@@ -91,6 +92,10 @@ const mainRules = [...document.styleSheets].flatMap((s) => [...s.cssRules]).map(
   .filter((t) => [...document.querySelector('main')!.classList].some((c) => t.includes(`.${c}`)))
 const phoneRule = mainRules.find((t) => t.startsWith('@media (min-width:0px)')) ?? ''
 check('…and the page ends above it, not behind it', phoneRule.includes('calc(72px + env(safe-area-inset-bottom))'), mainRules.join(' | '))
+// Without viewport-fit=cover iOS reports every safe-area inset as 0, and the
+// installed app's bar sits behind the home indicator.
+const viewport = /<meta name="viewport" content="([^"]*)"/.exec(readFileSync(new URL('../index.html', import.meta.url), 'utf8'))?.[1] ?? ''
+check('…and clear of the home indicator: the page covers the screen, so the insets are real', viewport.includes('viewport-fit=cover'), viewport)
 check('Home is the compact one: no greeting, no panels', !text().includes('Good afternoon') && !document.querySelector('[data-panel="todos"]'))
 const now = () => document.querySelector('[data-panel="now"]')
 check('the meeting now is one card, with Join and Note', await waitFor(() => !!now()?.textContent?.includes('Design review')) &&
