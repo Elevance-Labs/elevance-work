@@ -169,7 +169,8 @@ failNext('notes.insert', { code: '42501', message: "You can't link a note to tha
 await click(button('New note'))
 await typeInto('Note', 'Refused', dialog()!)
 await click(button('Close', dialog()!))
-check('the database’s refusal is shown, and the note stays open', dialog()?.textContent?.includes("You can't link a note to that project."))
+check('the database’s refusal is shown, and the note stays open',
+  await waitFor(() => dialog()?.textContent?.includes("You can't link a note to that project."), 5000))
 await click(button('Close', dialog()!))
 check('…closing tries again', await waitFor(() => !dialog()) && table('notes').some((n) => n.body === 'Refused'))
 
