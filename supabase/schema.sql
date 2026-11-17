@@ -1,6 +1,6 @@
 -- Elevance Work: people, projects, issues, sprints, releases, comments,
 -- attachments and docs (Google Drive), notifications, the shared calendar,
--- todos, notes, saved filters, and the hooks that reach Google Chat and Calendar.
+-- todos and their lists, notes, saved filters, and the hooks that reach Google Chat and Calendar.
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -1004,6 +1004,32 @@ create index todos_owner_idx on public.todos (owner_id);
 create index todos_shared_with_idx on public.todos using gin (shared_with);
 create index todos_project_idx on public.todos (project_id);
 
+-- Each person's own todo lists, private even from admins. The Inbox is not a
+-- row: it is every todo you haven't filed.
+create table public.todo_lists (
+  id         uuid primary key default gen_random_uuid(),
+  owner_id   uuid not null references public.profiles (id) on delete cascade,
+  name       text not null check (length(trim(name)) between 1 and 60),
+  color      text not null default '#5c6bc0' check (color ~ '^#[0-9a-fA-F]{6}$'),
+  position   double precision not null default extract(epoch from now()),
+  created_at timestamptz not null default now(),
+  unique (id, owner_id)
+);
+create unique index todo_lists_owner_name_key on public.todo_lists (owner_id, lower(name));
+
+-- Which of your lists a todo you are on sits in (none: your Inbox). Per
+-- person, since a todo is shared; always one of the person's own lists.
+-- Written only by todo_move; a list's deletion puts its todos back in the
+-- Inbox. Kept when you leave a todo, for if you are put back on it.
+create table public.todo_places (
+  todo_id    uuid not null references public.todos (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  list_id    uuid not null,
+  primary key (todo_id, profile_id),
+  foreign key (list_id, profile_id) references public.todo_lists (id, owner_id) on delete cascade
+);
+create index todo_places_list_idx on public.todo_places (list_id);
+
 -- Your own Google Calendar: the google-calendar function's encrypted refresh
 -- token per person. No client reads or writes it (service role only).
 create table public.calendar_connections (
@@ -1544,6 +1570,46 @@ returns void language sql security definer set search_path = '' as $$
    where id = p_todo and shared_with @> array[public.current_profile_id()];
 $$;
 
+create function public.todo_lists_stamp()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    new.owner_id := public.current_profile_id();
+  elsif new.owner_id <> old.owner_id then
+    raise exception 'A list keeps its owner.' using errcode = '42501';
+  end if;
+  new.name := trim(new.name);
+  return new;
+end;
+$$;
+
+create trigger todo_lists_stamp
+  before insert or update on public.todo_lists
+  for each row execute function public.todo_lists_stamp();
+
+-- Files a todo you are on into one of your lists, or (null) back into your Inbox.
+create function public.todo_move(p_todo uuid, p_list uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_me uuid := public.current_profile_id();
+begin
+  if v_me is null or not exists (
+    select 1 from public.todos t
+     where t.id = p_todo and (t.owner_id = v_me or t.shared_with @> array[v_me])) then
+    raise exception 'You can''t move that todo.' using errcode = '42501';
+  end if;
+  if p_list is null then
+    delete from public.todo_places where todo_id = p_todo and profile_id = v_me;
+    return;
+  end if;
+  if not exists (select 1 from public.todo_lists l where l.id = p_list and l.owner_id = v_me) then
+    raise exception 'That list isn''t yours.' using errcode = '42501';
+  end if;
+  insert into public.todo_places (todo_id, profile_id, list_id) values (p_todo, v_me, p_list)
+  on conflict (todo_id, profile_id) do update set list_id = excluded.list_id;
+end;
+$$;
+
 create function public.note_labels_stamp()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -1830,6 +1896,12 @@ grant select, delete on public.todos to authenticated;
 grant insert (title, notes, due_on, done_at, issue_id, project_id, position, shared_with) on public.todos to authenticated;
 grant update (title, notes, due_on, done_at, issue_id, project_id, position, shared_with) on public.todos to authenticated;
 
+grant select, delete on public.todo_lists to authenticated;
+grant insert (name, color, position) on public.todo_lists to authenticated;
+grant update (name, color, position) on public.todo_lists to authenticated;
+-- Written only by todo_move.
+grant select on public.todo_places to authenticated;
+
 grant select, delete on public.note_labels to authenticated;
 grant insert (name) on public.note_labels to authenticated;
 grant update (name) on public.note_labels to authenticated;
@@ -1853,7 +1925,7 @@ grant execute on function
   public.bind_profile(), public.project_create(text, text, public.project_kind, public.project_visibility, text),
   public.project_statuses_reorder(uuid, uuid[]), public.fields_reorder(uuid, uuid[]),
   public.project_rerank(uuid), public.sprint_start(uuid, date, date, text, text),
-  public.sprint_complete(uuid, uuid), public.todo_leave(uuid),
+  public.sprint_complete(uuid, uuid), public.todo_leave(uuid), public.todo_move(uuid, uuid),
   public.save_push_subscription(text, text, text, text, boolean), public.send_test_notification()
   to authenticated;
 
@@ -1883,6 +1955,8 @@ alter table public.attachments enable row level security;
 alter table public.documents enable row level security;
 alter table public.saved_filters enable row level security;
 alter table public.todos enable row level security;
+alter table public.todo_lists enable row level security;
+alter table public.todo_places enable row level security;
 alter table public.note_labels enable row level security;
 alter table public.notes enable row level security;
 -- No policies: only the google-calendar function (service role) touches it.
@@ -2055,6 +2129,20 @@ create policy todos_update on public.todos for update to authenticated
               or shared_with @> array[(select public.current_profile_id())]);
 create policy todos_delete on public.todos for delete to authenticated
   using (owner_id = (select public.current_profile_id()));
+
+-- Todo lists and where your todos sit: private to their owner, even from admins.
+create policy todo_lists_select on public.todo_lists for select to authenticated
+  using (owner_id = (select public.current_profile_id()));
+create policy todo_lists_insert on public.todo_lists for insert to authenticated
+  with check (owner_id = (select public.current_profile_id()));
+create policy todo_lists_update on public.todo_lists for update to authenticated
+  using (owner_id = (select public.current_profile_id()))
+  with check (owner_id = (select public.current_profile_id()));
+create policy todo_lists_delete on public.todo_lists for delete to authenticated
+  using (owner_id = (select public.current_profile_id()));
+
+create policy todo_places_select on public.todo_places for select to authenticated
+  using (profile_id = (select public.current_profile_id()));
 
 -- Notes and their labels: private to their owner, even from admins.
 create policy note_labels_select on public.note_labels for select to authenticated

@@ -17,7 +17,8 @@ import { emitItemChange } from '../workspace/itemEvents'
 import { FormDialog } from './common'
 import NoteDialog from './notes/NoteDialog'
 import { IssuePicker, PeoplePicker } from './pickers'
-import { TodoProjectSelect } from './TodoList'
+import { TodoListSelect, TodoProjectSelect } from './TodoList'
+import { useTodoLists } from './todos/useTodoLists'
 
 export type CreateKind = 'issue' | 'todo' | 'note'
 
@@ -37,6 +38,8 @@ function TodoDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [issue, setIssue] = useState<Issue | null>(null)
   const [projectId, setProjectId] = useState('')
   const [people, setPeople] = useState<string[]>([])
+  const [listId, setListId] = useState('')
+  const { lists } = useTodoLists()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,11 +47,21 @@ function TodoDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     if (!title.trim()) return setError('Give the todo a title.')
     setBusy(true)
     setError(null)
-    const { error: e } = await supabase.from('todos')
+    const { data, error: e } = await supabase.from('todos')
       .insert({ title: title.trim(), due_on: due || null, issue_id: issue?.id ?? null,
         project_id: issue ? null : projectId || null, shared_with: people })
+      .select('id').single()
+    if (e || !data) {
+      setBusy(false)
+      return setError(errorMessage(e))
+    }
+    // Filed in one of your lists; the Inbox needs nothing.
+    const moved = listId ? await supabase.rpc('todo_move', { p_todo: data.id, p_list: listId }) : null
     setBusy(false)
-    if (e) return setError(errorMessage(e))
+    if (moved?.error) {
+      emitItemChange('todo')
+      return setError(`Added to your Inbox: ${errorMessage(moved.error)}`)
+    }
     emitItemChange('todo')
     onSaved()
   }
@@ -61,6 +74,7 @@ function TodoDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       <IssuePicker label="Link to an issue (optional)" value={issue} onChange={setIssue} />
       {!issue && <TodoProjectSelect value={projectId} onChange={setProjectId} />}
       <PeoplePicker label="Add people (optional)" value={people} options={profiles.filter((p) => p.active && p.id !== me.id)} onChange={setPeople} />
+      {lists.length > 0 && <TodoListSelect value={listId} lists={lists} onChange={setListId} />}
     </FormDialog>
   )
 }

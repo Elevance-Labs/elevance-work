@@ -25,7 +25,12 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
+import AddLinkIcon from '@mui/icons-material/AddLink'
+import AttachFileIcon from '@mui/icons-material/AttachFile'
 import CheckIcon from '@mui/icons-material/Check'
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined'
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
@@ -50,6 +55,7 @@ import { CustomFieldInput, CustomFieldValue } from '../CustomFields'
 import { fieldsFor } from '../../lib/fields'
 import DocsList from '../DocsList'
 import TodoList from '../TodoList'
+import { useLayout } from '../layoutContext'
 import { ProjectAvatar, StatusLozenge, TypeIcon } from '../IssueBits'
 import { IssuePicker, LabelsInput, PersonPicker, PrioritySelect, StatusSelect } from '../pickers'
 import { RichTextEditor } from '../RichText'
@@ -59,6 +65,17 @@ import Development from './Development'
 import Comments from './Comments'
 import History from './History'
 import { Children, Links, type LinkedIssue } from './Relations'
+
+/** The sections that fold away while empty, each with its quick-add button. */
+type QuickAdd = 'children' | 'links' | 'attach' | 'docs' | 'todos'
+interface QuickButton {
+  key: QuickAdd
+  label: string
+  icon: ReactNode
+  onClick?: () => void
+  // Opens a file input by its id, as a label does (the browser allows a file picker only from a click).
+  htmlFor?: string
+}
 
 interface Loaded {
   issue: IssueDetail
@@ -150,8 +167,16 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
     setData(await loadIssue(issueKey))
   }, [issueKey])
 
+  // Empty sections stay folded into the quick-add buttons until one is asked for.
+  const [revealed, setRevealed] = useState<QuickAdd[]>([])
+  // The todos load themselves; null until they have.
+  const [todoCount, setTodoCount] = useState<number | null>(null)
+  const { openCreate } = useLayout()
+
   useEffect(() => {
     setData(undefined)
+    setRevealed([])
+    setTodoCount(null)
     reload()
   }, [reload])
 
@@ -185,6 +210,33 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
 
   const type = typeById(issue.type_id)
   const level = type?.level ?? 'standard'
+
+  // A section with something in it shows; an empty one only once asked for
+  // from the quick-add buttons (and only to whoever can add to it).
+  const has: Record<QuickAdd, boolean> = {
+    children: data.children.length > 0,
+    links: data.links.length > 0,
+    attach: data.attachments.length > 0,
+    docs: data.docs.length > 0,
+    todos: !!todoCount,
+  }
+  const show = (k: QuickAdd) => has[k] || revealed.includes(k)
+  const reveal = (k: QuickAdd) => () => setRevealed((r) => (r.includes(k) ? r : [...r, k]))
+  const attachInputId = `attach-${issue.id}`
+  const epicLevel = level === 'epic'
+  const quickAdds = ([
+    editable && level !== 'subtask' && {
+      key: 'children', label: epicLevel ? 'Add issue' : 'Add sub-task', icon: <AccountTreeOutlinedIcon />,
+      // An epic's issue is a whole issue: the create dialog, under this epic.
+      onClick: epicLevel
+        ? () => openCreate({ projectId: issue.project_id, parent: issue, onCreated: (i) => setData((d) => d && { ...d, children: [...d.children, i] }) })
+        : reveal('children'),
+    },
+    editable && { key: 'links', label: 'Link issue', icon: <AddLinkIcon />, onClick: reveal('links') },
+    editable && { key: 'attach', label: 'Attach', icon: <AttachFileIcon />, htmlFor: attachInputId },
+    can.addDocs(role) && { key: 'docs', label: 'Add doc', icon: <DescriptionOutlinedIcon />, onClick: reveal('docs') },
+    todoCount === 0 && { key: 'todos', label: 'Add todo', icon: <ChecklistOutlinedIcon />, onClick: reveal('todos') },
+  ] as (QuickButton | false)[]).filter((q): q is QuickButton => !!q && !show(q.key))
   const statuses = statusesOf(issue.project_id)
   const fields = meta ? fieldsFor(meta.fields, issue.type_id) : []
   const watching = data.watchers.includes(me.id)
@@ -566,22 +618,45 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
                 <StatusLozenge status={statusById(issue.status_id)} />
                 <PersonAvatar person={profileById(issue.assignee_id)} size={22} tooltip />
               </Stack>
+              {quickAdds.length > 0 && (
+                <Stack direction="row" role="toolbar" aria-label="Add to this issue" sx={{ flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+                  {quickAdds.map((q) => (
+                    <Button key={q.key} size="small" color="inherit" startIcon={q.icon} onClick={q.onClick}
+                      {...(q.htmlFor ? { component: 'label', htmlFor: q.htmlFor } : {})}
+                      sx={{ bgcolor: 'action.hover', color: 'text.secondary', borderRadius: 1.5, px: 1.25, fontWeight: 500,
+                        '&:hover': { bgcolor: 'action.selected', color: 'text.primary' } }}>
+                      {q.label}
+                    </Button>
+                  ))}
+                </Stack>
+              )}
             </Box>
             {descriptionBlock}
-            <Children parent={issue} issues={data.children} role={role} onChange={(children) => setData((d) => d && { ...d, children })} />
-            <Links issue={issue} links={data.links} role={role} onChange={(links) => setData((d) => d && { ...d, links })} />
+            {show('children') && (
+              <Children parent={issue} issues={data.children} role={role} startAdding={revealed.includes('children')}
+                onChange={(children) => setData((d) => d && { ...d, children })} />
+            )}
+            {show('links') && (
+              <Links issue={issue} links={data.links} role={role} startAdding={revealed.includes('links')}
+                onChange={(links) => setData((d) => d && { ...d, links })} />
+            )}
             <Development links={data.devLinks} />
-            <Attachments issueId={issue.id} attachments={data.attachments} role={role}
+            <Attachments issueId={issue.id} attachments={data.attachments} role={role} inputId={attachInputId} collapsed={!show('attach')}
               onChange={(attachments) => setData((d) => d && { ...d, attachments })} />
-            <Section title="Docs">
-              <DocsList projectId={issue.project_id} issueId={issue.id} docs={data.docs} role={role} dense
-                onChange={(docs) => setData((d) => d && { ...d, docs })} />
-            </Section>
+            {show('docs') && (
+              <Section title="Docs">
+                <DocsList projectId={issue.project_id} issueId={issue.id} docs={data.docs} role={role} dense
+                  onChange={(docs) => setData((d) => d && { ...d, docs })} />
+              </Section>
+            )}
             {/* Yours and the ones you're on: todos are not the issue's, so
-                anyone who can see the issue may keep them here. */}
-            <Section title="Todos">
-              <TodoList issue={{ id: issue.id, key: issue.key }} />
-            </Section>
+                anyone who can see the issue may keep them here. Mounted while
+                folded away, to know whether there are any. */}
+            <Box hidden={!show('todos')}>
+              <Section title="Todos">
+                <TodoList issue={{ id: issue.id, key: issue.key }} onCount={setTodoCount} autoFocus={revealed.includes('todos')} />
+              </Section>
+            </Box>
             <Box>
               <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
                 <Tab value="comments" label={`Comments${data.comments.length ? ` (${data.comments.length})` : ''}`} />

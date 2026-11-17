@@ -42,17 +42,20 @@ export function Children({
   issues: children,
   role,
   onChange,
+  startAdding,
 }: {
   parent: Issue
   issues: Issue[]
   role: ProjectRole | null
   onChange: (children: Issue[]) => void
+  // Opened from the issue's quick-add buttons: the sub-task form is open.
+  startAdding?: boolean
 }) {
   const { typeById, statusesOf, issueTypes } = useWorkspace()
   const { openCreate } = useLayout()
   const level = typeById(parent.type_id)?.level
   const statuses = statusesOf(parent.project_id)
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState(!!startAdding)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -128,13 +131,16 @@ export function Links({
   links,
   role,
   onChange,
+  startAdding,
 }: {
   issue: Issue
   links: LinkedIssue[]
   role: ProjectRole | null
   onChange: (links: LinkedIssue[]) => void
+  // Opened from the issue's quick-add buttons: the link form is open.
+  startAdding?: boolean
 }) {
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState(!!startAdding)
   const [choice, setChoice] = useState('blocks')
   const [other, setOther] = useState<Issue | null>(null)
   const [busy, setBusy] = useState(false)

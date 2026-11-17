@@ -1,9 +1,11 @@
 // Todos: your own, and the ones people put you on. Everyone on a todo sees,
 // edits and ticks it off, and adds people; only whoever made it deletes it
 // (RLS). A todo may be due on a day and tied to an issue or just to a
-// project (an issue's todo is in its project). The Todos page
-// shows them all; the dashboard, what's due; an issue, the ones tied to it.
-import { useCallback, useEffect, useState } from 'react'
+// project (an issue's todo is in its project), and sits in your Inbox or one
+// of your lists (each person files a shared todo in their own). The Todos
+// page shows one view (the Inbox, a list, Today, Tomorrow, This week); the
+// dashboard, what's due; an issue, the ones tied to it.
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Alert,
@@ -11,9 +13,12 @@ import {
   Box,
   Button,
   Checkbox,
-  Chip,
   Collapse,
+  Divider,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
   Popover,
   Stack,
@@ -21,35 +26,31 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined'
+import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined'
+import LogoutIcon from '@mui/icons-material/Logout'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined'
 import { useMe } from '../auth/AuthProvider'
-import { supabase } from '../lib/supabase'
-import { addDays, errorMessage, formatDate, todayIso } from '../lib/constants'
-import type { Issue, Profile, Todo } from '../lib/types'
+import { todayIso } from '../lib/constants'
+import {
+  defaultDue, dueLabel, groupOpen, inView, isSmartView, listOf, sortDone,
+  type TodoRow, type TodoView,
+} from '../lib/todos'
+import type { Profile, Todo, TodoList as TodoListRow } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
-import { useItemChanges } from '../workspace/itemEvents'
 import { PersonAvatar } from './common'
 import { ProjectAvatar } from './IssueBits'
-import { IssuePicker, PeoplePicker } from './pickers'
-
-type Row = Todo & { issue: { key: string; title: string } | null }
-export const TODO_COLUMNS = '*, issue:issues(key, title)'
-
-function groupTodos(todos: Row[], today: string) {
-  const open = todos.filter((t) => !t.done_at)
-  const byDue = (a: Row, b: Row) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999') || a.position - b.position
-  return {
-    overdue: open.filter((t) => t.due_on && t.due_on < today).sort(byDue),
-    today: open.filter((t) => t.due_on === today).sort(byDue),
-    upcoming: open.filter((t) => t.due_on && t.due_on > today).sort(byDue),
-    someday: open.filter((t) => !t.due_on).sort(byDue),
-    done: todos.filter((t) => t.done_at).sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? '')),
-  }
-}
+import { PeoplePicker } from './pickers'
+import { DueMenu, ListDot, ListMenu } from './todos/TodoBits'
+import TodoComposer from './todos/TodoComposer'
+import { useTodoLists } from './todos/useTodoLists'
+import { useTodos, type TodoStore } from './todos/useTodos'
 
 /** Who is on a todo and who may be added: its creator and people, for the creator or anyone on it. */
-function TodoPeople({ todo, onChange, onLeave }: { todo: Row; onChange: (sharedWith: string[]) => void; onLeave: () => void }) {
+function TodoPeople({ todo, onChange, onLeave }: { todo: TodoRow; onChange: (sharedWith: string[]) => void; onLeave: () => void }) {
   const me = useMe()
   const { profiles, profileById } = useWorkspace()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -74,7 +75,7 @@ function TodoPeople({ todo, onChange, onLeave }: { todo: Row; onChange: (sharedW
             </AvatarGroup>
           </Box>
         ) : (
-          <IconButton size="small" aria-label={label} onClick={(e) => setAnchor(e.currentTarget)}>
+          <IconButton size="small" aria-label={label} className="todo-reveal" onClick={(e) => setAnchor(e.currentTarget)}>
             <PersonAddAltOutlinedIcon fontSize="small" />
           </IconButton>
         )}
@@ -110,217 +111,241 @@ export function TodoProjectSelect({ value, onChange, size }: { value: string; on
   )
 }
 
-function TodoItem({ todo, showIssue, onChange, onDelete, onLeave }: {
-  todo: Row
-  showIssue: boolean
+/** Which of your lists a new todo goes in (the Inbox, or one of yours). */
+export function TodoListSelect({ value, lists, onChange }: { value: string; lists: TodoListRow[]; onChange: (id: string) => void }) {
+  return (
+    <TextField select fullWidth label="List" value={value} onChange={(e) => onChange(e.target.value)}>
+      <MenuItem value="">Inbox</MenuItem>
+      {lists.map((l) => <MenuItem key={l.id} value={l.id}>{l.name}</MenuItem>)}
+    </TextField>
+  )
+}
+
+// Coloured by how soon: overdue red, today green, within a week purple.
+function dueColor(due: string, today: string, done: boolean) {
+  if (done) return 'text.secondary'
+  if (due < today) return 'error.main'
+  if (due === today) return 'success.main'
+  return 'text.secondary'
+}
+
+function TodoItem({ todo, showContext, lists, showList, onChange, onDelete, onLeave, onMove }: {
+  todo: TodoRow
+  showContext: boolean
+  lists: TodoListRow[]
+  showList: boolean
   onChange: (t: Partial<Todo>) => void
   onDelete: () => void
   onLeave: () => void
+  onMove: (listId: string | null) => void
 }) {
   const me = useMe()
   const { projectById } = useWorkspace()
   const [title, setTitle] = useState(todo.title)
+  const [menu, setMenu] = useState<{ what: 'more' | 'move' | 'due'; el: HTMLElement } | null>(null)
   const today = todayIso()
   const project = !todo.issue ? projectById(todo.project_id) : undefined
+  const list = lists.find((l) => l.id === listOf(todo))
+  const mine = todo.owner_id === me.id
+  const done = !!todo.done_at
+  const meta = [
+    todo.due_on && (
+      <Box key="due" component="button" type="button" aria-label={`Due ${dueLabel(todo.due_on, today)}`}
+        onClick={(e) => setMenu({ what: 'due', el: e.currentTarget })}
+        sx={{ border: 0, p: 0, bgcolor: 'transparent', cursor: 'pointer', font: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 0.5,
+          color: dueColor(todo.due_on, today, done) }}>
+        <CalendarTodayOutlinedIcon sx={{ fontSize: 13 }} />{dueLabel(todo.due_on, today)}
+      </Box>
+    ),
+    showContext && todo.issue && (
+      <Tooltip key="issue" title={todo.issue.title}>
+        <Box component={Link} to={{ search: `?issue=${todo.issue.key}` }} sx={{ color: 'text.secondary', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+          {todo.issue.key}
+        </Box>
+      </Tooltip>
+    ),
+    showContext && project && (
+      <Tooltip key="project" title={project.name}>
+        <Box component={Link} to={`/projects/${project.key}/calendar`}
+          sx={{ color: 'text.secondary', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5, '&:hover': { textDecoration: 'underline' } }}>
+          <ProjectAvatar project={project} size={14} />{project.key}
+        </Box>
+      </Tooltip>
+    ),
+    showList && (
+      <Box key="list" component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+        {list ? <><ListDot color={list.color} size={8} />{list.name}</> : <><InboxOutlinedIcon sx={{ fontSize: 13 }} />Inbox</>}
+      </Box>
+    ),
+  ].filter(Boolean)
+
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 0.25 }} data-todo={todo.id}>
-      <Checkbox checked={!!todo.done_at} slotProps={{ input: { 'aria-label': `Done: ${todo.title}` } }}
+    <Stack direction="row" spacing={0.5} data-todo={todo.id}
+      sx={{ alignItems: 'flex-start', py: 0.25, borderBottom: 1, borderColor: 'divider',
+        '@media (hover: hover)': { '& .todo-reveal': { opacity: 0 }, '&:hover .todo-reveal, &:focus-within .todo-reveal': { opacity: 1 } } }}>
+      <Checkbox checked={done} size="small" slotProps={{ input: { 'aria-label': `Done: ${todo.title}` } }} sx={{ mt: 0.25 }}
         onChange={(e) => onChange({ done_at: e.target.checked ? new Date().toISOString() : null })} />
-      <TextField variant="standard" fullWidth value={title} onChange={(e) => setTitle(e.target.value)}
-        onBlur={() => title.trim() && title !== todo.title && onChange({ title: title.trim() })}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        slotProps={{ input: { disableUnderline: true, sx: { textDecoration: todo.done_at ? 'line-through' : 'none', color: todo.done_at ? 'text.secondary' : undefined } },
-          htmlInput: { 'aria-label': 'Todo' } }} />
-      <TodoPeople todo={todo} onChange={(shared_with) => onChange({ shared_with })} onLeave={onLeave} />
-      {showIssue && todo.issue && (
-        <Chip size="small" label={todo.issue.key} component={Link} to={{ search: `?issue=${todo.issue.key}` }} clickable variant="outlined" />
-      )}
-      {showIssue && project && (
-        <Tooltip title={project.name}>
-          <Chip size="small" variant="outlined" label={project.key} avatar={<ProjectAvatar project={project} size={18} />}
-            component={Link} to={`/projects/${project.key}/calendar`} clickable />
-        </Tooltip>
-      )}
-      <TextField type="date" variant="standard" value={todo.due_on ?? ''} onChange={(e) => onChange({ due_on: e.target.value || null })}
-        slotProps={{ htmlInput: { 'aria-label': 'Due on' }, input: { disableUnderline: true } }}
-        sx={{ width: 130, flexShrink: 0, '& input': { color: !todo.done_at && todo.due_on && todo.due_on < today ? 'error.main' : 'text.secondary', fontSize: 13 } }} />
-      {todo.owner_id === me.id ? (
-        <Tooltip title="Delete">
-          <IconButton size="small" aria-label={`Delete ${todo.title}`} onClick={onDelete}><DeleteOutlineIcon fontSize="small" /></IconButton>
-        </Tooltip>
-      ) : (
-        // Only its creator deletes a todo; keeps the row's columns lined up.
-        <Box sx={{ width: 34, flexShrink: 0 }} />
-      )}
+      <Box sx={{ flex: 1, minWidth: 0, py: 0.5 }}>
+        <TextField variant="standard" fullWidth value={title} onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => title.trim() && title !== todo.title && onChange({ title: title.trim() })}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          slotProps={{ input: { disableUnderline: true, sx: { py: 0, textDecoration: done ? 'line-through' : 'none', color: done ? 'text.secondary' : undefined } },
+            htmlInput: { 'aria-label': 'Todo', sx: { py: 0.25 } } }} />
+        {meta.length > 0 && (
+          <Stack direction="row" sx={{ flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.25, fontSize: 12, alignItems: 'center' }}>{meta}</Stack>
+        )}
+      </Box>
+      <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0, pt: 0.5 }}>
+        {!todo.due_on && (
+          <Tooltip title="Due date">
+            <IconButton size="small" className="todo-reveal" aria-label={`Due date for ${todo.title}`} onClick={(e) => setMenu({ what: 'due', el: e.currentTarget })}>
+              <CalendarTodayOutlinedIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        <TodoPeople todo={todo} onChange={(shared_with) => onChange({ shared_with })} onLeave={onLeave} />
+        <IconButton size="small" className="todo-reveal" aria-label={`More for ${todo.title}`} onClick={(e) => setMenu({ what: 'more', el: e.currentTarget })}>
+          <MoreHorizIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+
+      <DueMenu anchor={menu?.what === 'due' ? menu.el : null} value={todo.due_on ?? ''}
+        onPick={(d) => onChange({ due_on: d || null })} onClose={() => setMenu(null)} />
+      <ListMenu anchor={menu?.what === 'move' ? menu.el : null} title="Move to" lists={lists} value={listOf(todo)}
+        onPick={onMove} onClose={() => setMenu(null)} />
+      <Menu anchorEl={menu?.what === 'more' ? menu.el : null} open={menu?.what === 'more'} onClose={() => setMenu(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ list: { dense: true } }}>
+        <MenuItem onClick={() => setMenu((m) => m && { what: 'move', el: m.el })}>
+          <ListItemIcon><DriveFileMoveOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Move to…</ListItemText>
+        </MenuItem>
+        <Divider />
+        {mine ? (
+          <MenuItem aria-label={`Delete ${todo.title}`} onClick={() => { setMenu(null); onDelete() }} sx={{ color: 'error.main' }}>
+            <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => { setMenu(null); onLeave() }} sx={{ color: 'error.main' }}>
+            <ListItemIcon><LogoutIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Leave this todo</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
     </Stack>
   )
 }
 
+const EMPTY: Record<string, string> = {
+  inbox: 'Your Inbox is clear.',
+  today: 'Nothing due today.',
+  tomorrow: 'Nothing due tomorrow.',
+  week: 'Nothing due this week.',
+}
+
 /**
- * onChange: after any write here, so a view showing the same todos (the dashboard's agenda) reads them again.
- * issue: only the todos tied to that issue, and new ones are tied to it.
+ * One view of the todos in a store.
+ * view: the Inbox, a smart view or a list (the Todos page); none for an issue's or the dashboard's.
+ * compact: the dashboard's: what's overdue or due today, and a link to the rest.
+ * issue: the store holds that issue's todos, and new ones are tied to it.
  */
-export default function TodoList({ compact, onChange, issue }: {
+export function TodoListView({ store, lists, view, compact, issue, autoFocus }: {
+  store: TodoStore
+  lists: TodoListRow[]
+  view?: TodoView
   compact?: boolean
-  onChange?: () => void
   issue?: { id: string; key: string }
+  autoFocus?: boolean
 }) {
-  const me = useMe()
-  const { profiles } = useWorkspace()
-  const [todos, setTodos] = useState<Row[] | null>(null)
-  const [title, setTitle] = useState('')
-  const [due, setDue] = useState('')
-  const [linked, setLinked] = useState<Issue | null>(null)
-  const [projectId, setProjectId] = useState('')
-  const [people, setPeople] = useState<string[]>([])
-  const [showMore, setShowMore] = useState(false)
   const [showDone, setShowDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [showMore, setShowMore] = useState(false)
   const today = todayIso()
-  const issueId = issue?.id
-
-  const load = useCallback(async () => {
-    let q = supabase.from('todos').select(TODO_COLUMNS)
-    if (issueId) q = q.eq('issue_id', issueId)
-    const { data } = await q.order('position')
-    setTodos((data ?? []) as unknown as Row[])
-  }, [issueId])
-
-  useEffect(() => {
-    load()
-  }, [load])
-  useItemChanges(['todo'], load)
-
-  async function add() {
-    if (!title.trim()) return
-    setError(null)
-    const { data, error: e } = await supabase.from('todos')
-      .insert({ title: title.trim(), due_on: due || null, issue_id: issueId ?? linked?.id ?? null,
-        project_id: issueId || linked ? null : projectId || null, shared_with: people })
-      .select(TODO_COLUMNS).single()
-    if (e || !data) return setError(errorMessage(e))
-    setTodos((ts) => [...(ts ?? []), data as unknown as Row])
-    onChange?.()
-    setTitle('')
-    setDue('')
-    setLinked(null)
-    setProjectId('')
-    setPeople([])
-  }
-
-  async function update(t: Row, patch: Partial<Todo>) {
-    setTodos((ts) => ts && ts.map((x) => (x.id === t.id ? { ...x, ...patch } : x)))
-    const { error: e } = await supabase.from('todos').update(patch).eq('id', t.id)
-    if (e) {
-      setError(errorMessage(e))
-      load()
-    }
-    onChange?.()
-  }
-
-  async function remove(t: Row) {
-    setTodos((ts) => ts && ts.filter((x) => x.id !== t.id))
-    const { error: e } = await supabase.from('todos').delete().eq('id', t.id)
-    if (e) {
-      setError(errorMessage(e))
-      load()
-    }
-    onChange?.()
-  }
-
-  // Off someone else's todo: it leaves your list.
-  async function leave(t: Row) {
-    setTodos((ts) => ts && ts.filter((x) => x.id !== t.id))
-    const { error: e } = await supabase.rpc('todo_leave', { p_todo: t.id })
-    if (e) {
-      setError(errorMessage(e))
-      load()
-    }
-    onChange?.()
-  }
-
+  const { todos, error, setError } = store
   if (!todos) return null
-  const g = groupTodos(todos, today)
-  const group = (label: string, rows: Row[], color?: string) => rows.length > 0 && (
-    <Box key={label} sx={{ mb: 1 }}>
-      <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', color: color ?? 'text.secondary' }}>
-        {label} ({rows.length})
-      </Typography>
-      {rows.map((t) => (
-        <TodoItem key={t.id} todo={t} showIssue={!issueId} onChange={(p) => update(t, p)} onDelete={() => remove(t)} onLeave={() => leave(t)} />
-      ))}
+
+  const inThis = view ? todos.filter((t) => inView(t, view, today)) : todos
+  const open = inThis.filter((t) => !t.done_at)
+  let groups = groupOpen(open, view ?? 'inbox', today)
+  // Within a list or the Inbox, the days are the groups; in Today or Tomorrow there's one.
+  if (view === 'today' || view === 'tomorrow') groups = groups.map((g) => (g.key === 'upcoming' ? { ...g, label: 'Tomorrow' } : g))
+  const later = compact ? groups.filter((g) => g.key === 'upcoming' || g.key === 'none') : []
+  if (compact) groups = groups.filter((g) => g.key === 'overdue' || g.key === 'today')
+  const done = sortDone(inThis.filter((t) => t.done_at))
+  // Smart views and the dashboard span lists, so a row says which it is in.
+  const showList = !!view && isSmartView(view) || !!compact
+  const defaultList = view && view !== 'inbox' && !isSmartView(view) ? view : null
+
+  const row = (t: TodoRow) => (
+    <TodoItem key={t.id} todo={t} showContext={!issue} lists={lists} showList={showList && lists.length > 0}
+      onChange={(p) => store.update(t, p)} onDelete={() => store.remove(t)} onLeave={() => store.leave(t)}
+      onMove={(id) => store.move(t, id)} />
+  )
+  const section = (key: string, label: string, rows: TodoRow[], tone?: 'error') => (
+    <Box key={key} sx={{ mb: 1.5 }}>
+      {(groups.length > 1 || key === 'overdue' || key === 'done' || compact || !view) && (
+        <Typography variant="caption" component="h3" sx={{ fontWeight: 700, textTransform: 'uppercase', color: tone === 'error' ? 'error.main' : 'text.secondary' }}>
+          {label} ({rows.length})
+        </Typography>
+      )}
+      {rows.map(row)}
     </Box>
   )
-  const nothingOpen = !g.overdue.length && !g.today.length && !g.upcoming.length && !g.someday.length
 
   return (
     <Box>
-      <Box component="form" onSubmit={(e) => { e.preventDefault(); add() }} sx={{ mb: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <TextField fullWidth placeholder={issue ? `Add a todo for ${issue.key}` : 'Add a todo'} value={title}
-            onChange={(e) => setTitle(e.target.value)} size={issue ? 'small' : 'medium'}
-            slotProps={{ htmlInput: { 'aria-label': 'New todo', maxLength: 300 } }} />
-          <TextField type="date" value={due} onChange={(e) => setDue(e.target.value)} slotProps={{ htmlInput: { 'aria-label': 'Due on' } }}
-            size={issue ? 'small' : 'medium'} sx={{ minWidth: 150 }} />
-          <Button type="submit" variant="contained" disabled={!title.trim()}>Add</Button>
-        </Stack>
-        {!compact && (
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
-            {!issue && (
-              <Box sx={{ flex: 1 }}>
-                <IssuePicker label="Link to an issue (optional)" value={linked} onChange={setLinked} />
-              </Box>
-            )}
-            {!issue && !linked && (
-              <Box sx={{ flex: 1 }}>
-                <TodoProjectSelect value={projectId} onChange={setProjectId} />
-              </Box>
-            )}
-            <Box sx={{ flex: 1 }}>
-              <PeoplePicker label="Add people (optional)" value={people}
-                options={profiles.filter((p) => p.active && p.id !== me.id)} onChange={setPeople} />
-            </Box>
-          </Stack>
-        )}
-        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-          {[['Today', today], ['Tomorrow', addDays(today, 1)], ['Next week', addDays(today, 7)]].map(([label, d]) => (
-            <Chip key={label} size="small" label={label} variant={due === d ? 'filled' : 'outlined'} onClick={() => setDue(due === d ? '' : d)} />
-          ))}
-        </Stack>
-      </Box>
+      <TodoComposer key={view ?? 'all'} issue={issue} lists={lists} dense={!!issue || compact} autoFocus={autoFocus}
+        defaultDue={view ? defaultDue(view, today) : ''} defaultList={defaultList}
+        onAdd={store.add} />
       {error && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>{error}</Alert>}
-      {group('Overdue', g.overdue, 'error.main')}
-      {group('Today', g.today)}
+      {groups.map((g) => section(g.key, g.label, g.rows, g.tone))}
       {compact ? (
         <>
-          {!g.overdue.length && !g.today.length && (
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>Nothing due today.</Typography>
-          )}
-          {(g.upcoming.length > 0 || g.someday.length > 0) && (
+          {!groups.length && <Typography variant="body2" sx={{ color: 'text.secondary' }}>Nothing due today.</Typography>}
+          {later.length > 0 && (
             <Button size="small" component={Link} to="/todos" sx={{ mt: 0.5 }}>
-              {g.upcoming.length + g.someday.length} more on your list
+              {later.reduce((n, g) => n + g.rows.length, 0)} more on your list
             </Button>
           )}
         </>
       ) : (
         <>
-          {group('Upcoming', g.upcoming)}
-          {group('No date', g.someday)}
-          {nothingOpen && (
+          {!open.length && (
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-              {issue ? (g.done.length ? 'All done here.' : 'No todos on this issue yet.') : 'All done. Add something above.'}
+              {issue ? (done.length ? 'All done here.' : 'No todos on this issue yet.')
+                : (view && EMPTY[view]) ?? (done.length ? 'All done in this list.' : 'Nothing here yet. Add a todo above.')}
             </Typography>
           )}
-          {g.done.length > 0 && (
+          {done.length > 0 && (
             <>
-              <Button size="small" onClick={() => setShowDone((v) => !v)}>{showDone ? 'Hide' : 'Show'} {g.done.length} done</Button>
-              <Collapse in={showDone}>{group('Done', g.done.slice(0, showMore ? undefined : 30))}</Collapse>
-              {showDone && g.done.length > 30 && !showMore && <Button size="small" onClick={() => setShowMore(true)}>Show all</Button>}
+              <Button size="small" onClick={() => setShowDone((v) => !v)}>{showDone ? 'Hide' : 'Show'} {done.length} done</Button>
+              <Collapse in={showDone}>{section('done', 'Done', done.slice(0, showMore ? undefined : 30))}</Collapse>
+              {showDone && done.length > 30 && !showMore && <Button size="small" onClick={() => setShowMore(true)}>Show all</Button>}
             </>
           )}
         </>
       )}
-      {due && <Typography variant="caption" sx={{ color: 'text.secondary' }}>New todos due {formatDate(due)}</Typography>}
     </Box>
   )
+}
+
+/**
+ * Your todos, or one issue's, loading their own. The dashboard (compact) and the issue view use this; the Todos page a store of its own.
+ * onChange: after any write here, so a view showing the same todos (the dashboard's agenda) reads them again.
+ */
+export default function TodoList({ compact, onChange, issue, onCount, autoFocus }: {
+  compact?: boolean
+  onChange?: () => void
+  issue?: { id: string; key: string }
+  // How many todos there are once loaded (the issue view hides an empty section).
+  onCount?: (n: number) => void
+  autoFocus?: boolean
+}) {
+  const store = useTodos(issue?.id, onChange)
+  const { lists } = useTodoLists()
+  const count = store.todos?.length
+  useEffect(() => {
+    if (count !== undefined) onCount?.(count)
+  }, [count, onCount])
+  return <TodoListView store={store} lists={lists} compact={compact} issue={issue} autoFocus={autoFocus} />
 }

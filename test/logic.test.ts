@@ -1,5 +1,5 @@
 // The pure rules in src/lib: reports rebuilt from history, the calendar's
-// items and meetings, filters and their URL form, ranks, Google links, rich text, search.
+// items and meetings, filters and their URL form, ranks, Google links, rich text, search, todo views.
 import { setupDom, reporter } from './setup'
 setupDom()
 
@@ -15,6 +15,7 @@ const { releaseNotes, notesText } = await import('../src/lib/releases')
 const { roleIn } = await import('../src/lib/permissions')
 const { suggestKey } = await import('../src/lib/projects')
 const { matchesWords, searchTodos, searchNotes, isShortcut } = await import('../src/lib/search')
+const todosLib = await import('../src/lib/todos')
 type Issue = import('../src/lib/types').Issue
 type IssueEvent = import('../src/lib/types').IssueEvent
 type Sprint = import('../src/lib/types').Sprint
@@ -303,5 +304,38 @@ const key = (k: string, mods: Partial<KeyboardEvent>) => ({ key: k, metaKey: fal
 check('Cmd or Ctrl with the letter is a shortcut; the letter alone, or with Shift, is not',
   isShortcut(key('s', { metaKey: true }), 's') && isShortcut(key('K', { ctrlKey: true }), 'k') &&
   !isShortcut(key('s', {}), 's') && !isShortcut(key('s', { metaKey: true, shiftKey: true }), 's'))
+
+// ---------------- todo views ----------------
+{
+  const { inView, weekEnd, groupOpen, dueLabel, duePresets, parseSmartViews, openCount, defaultDue } = todosLib
+  type TodoRow = import('../src/lib/todos').TodoRow
+  const WED = '2026-10-21'
+  const td = (id: string, due_on: string | null, list: string | null = null, done = false) =>
+    ({ id, title: id, due_on, done_at: done ? '2026-10-20T10:00:00Z' : null, position: 0, place: list ? [{ list_id: list }] : [] }) as unknown as TodoRow
+  const all = [td('late', '2026-10-19', 'work'), td('now', WED), td('tmrw', '2026-10-22', 'work'), td('sun', '2026-10-25'),
+    td('mon', '2026-10-26'), td('none', null), td('lateDone', '2026-10-19', null, true)]
+  const ids = (view: string) => all.filter((t) => inView(t, view, WED)).map((t) => t.id).join()
+  check('a week ends on Sunday (weeks start on Monday)', weekEnd(WED) === '2026-10-25' && weekEnd('2026-10-25') === '2026-10-25' &&
+    weekEnd('2026-10-26') === '2026-11-01')
+  check('the Inbox holds what you haven’t filed; a list, what you filed there', ids('inbox') === 'now,sun,mon,none,lateDone' && ids('work') === 'late,tmrw')
+  check('Today: due today and overdue (not overdue ones done)', ids('today') === 'late,now', ids('today'))
+  check('Tomorrow: due tomorrow', ids('tomorrow') === 'tmrw')
+  check('This week: overdue and through Sunday', ids('week') === 'late,now,tmrw,sun', ids('week'))
+  check('counts are of open todos', openCount(all, 'inbox', WED) === 4)
+  check('a new todo in Today or This week is due today, in Tomorrow tomorrow, in a list undated',
+    defaultDue('today', WED) === WED && defaultDue('week', WED) === WED && defaultDue('tomorrow', WED) === '2026-10-22' && defaultDue('work', WED) === '')
+  const open = all.filter((t) => !t.done_at)
+  check('a list groups by Overdue, Today, Upcoming and No date',
+    groupOpen(open, 'inbox', WED).map((g) => `${g.key}:${g.rows.length}`).join() === 'overdue:1,today:1,upcoming:3,none:1')
+  check('…This week by day, empty days dropped',
+    groupOpen(open.filter((t) => inView(t, 'week', WED)), 'week', WED).map((g) => g.label).join() === 'Overdue,Today,Tomorrow,Sunday, Oct 25',
+    groupOpen(open.filter((t) => inView(t, 'week', WED)), 'week', WED).map((g) => g.label).join())
+  check('due days read as words close by', dueLabel(WED, WED) === 'Today' && dueLabel('2026-10-22', WED) === 'Tomorrow' &&
+    dueLabel('2026-10-20', WED) === 'Yesterday' && dueLabel('2026-10-24', WED) === 'Saturday' && dueLabel('2026-11-30', WED) === 'Nov 30')
+  check('quick picks: today, tomorrow, Saturday, next Monday', duePresets(WED).map((p) => p.date).join() === '2026-10-21,2026-10-22,2026-10-24,2026-10-26')
+  check('…without repeats (on a Saturday, the weekend is today)', duePresets('2026-10-24').map((p) => p.label).join() === 'Today,Tomorrow,Next week')
+  check('smart views shown: all at first, then as chosen, unknown ones ignored',
+    parseSmartViews(null).join() === 'today,tomorrow,week' && parseSmartViews('').join() === '' && parseSmartViews('week,bogus').join() === 'week')
+}
 
 done()

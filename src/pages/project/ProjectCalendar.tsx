@@ -9,7 +9,7 @@ import { datedWithin, type ItemKind } from '../../lib/calendar'
 import type { Issue, Release, Todo } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import CalendarView, { type Layer } from '../../components/calendar/CalendarView'
-import { TODO_COLUMNS } from '../../components/TodoList'
+import { TODO_COLUMNS } from '../../lib/todos'
 import { useProject } from './projectContext'
 
 const LAYERS: Layer[] = [

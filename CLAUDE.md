@@ -19,7 +19,8 @@ behaviour).
   person's own Google Calendar, read-only; beside them epics, issues,
   releases and todos; no app-made events; release dates pushed to the
   company Google Calendar; also a project tab), **todos** (yours plus the
-  people you add; shown on their issue; optionally a project), **notes**
+  people you add; shown on their issue; optionally a project; filed per
+  person in an Inbox or private lists; Today / Tomorrow / This week views), **notes**
   (private; own labels; pinned to the dashboard; linked to a project and/or
   one Google meeting), **search** (Cmd/Ctrl+S) and **create** (Cmd/Ctrl+K),
   **dashboard** (the meeting now with its note; agenda, todos, issues,
@@ -59,7 +60,8 @@ behaviour).
   `project_create`; a sprint's state only by `sprint_start` / `sprint_complete`
   (which also write `sprint_issues`); status / field order only by
   `project_statuses_reorder` / `fields_reorder`; leaving someone else's
-  todo only by `todo_leave`; ranks renumber via
+  todo only by `todo_leave`; where a todo sits in your lists only by
+  `todo_move` (`todo_places` has no client writes); ranks renumber via
   `project_rerank`.
 - **Some rows are written only by Edge Functions (service role).**
   `calendar_connections` (no client grants at all: encrypted Google refresh
@@ -132,9 +134,10 @@ behaviour).
 | `src/pages/home/` | Dashboard, Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
 | `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (all, due, or one issue's; a todo's project picker), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
-| `src/components/issue/` | The issue view and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
+| `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
+| `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
 | `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note-changed bus). |
@@ -151,7 +154,7 @@ behaviour).
 - No session → `Login` (Google only). After binding, everything sits inside
   `WorkspaceProvider` and `Layout`.
 - `/dashboard` (landing), `/issues` (filters in the URL), `/calendar`
-  (`?view=day|week&date=`, or `?month=`; week by default), `/todos`, `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one), `/projects`,
+  (`?view=day|week&date=`, or `?month=`; week by default), `/todos` (`?list=inbox|today|tomorrow|week|<list id>`), `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one), `/projects`,
   `/browse/:key` — everyone.
 - `/projects/:key` → Summary; `/backlog` (Scrum only; Kanban redirects to
   board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`, `/releases`, `/releases/:releaseId`,
@@ -227,6 +230,9 @@ behaviour).
   labels. The browser calls are in `src/pwa.ts`.
 - `install.ts` — the device and browser (`detectDevice`), running installed
   or in a tab (`isStandalone`), the install steps for each (`installGuide`).
+- `todos.ts` — the todo views (Inbox, a list, Today / Tomorrow / This week:
+  `inView`, `groupOpen`, `weekEnd`), the select with your own place, due-day
+  words and quick picks, list colours, which smart views show (localStorage).
 - `notes.ts` — note colours, the notes filter (URL form) and `matchesNote`
   (notes are filtered client-side: a person loads only their own), pinned-first order, meeting labels.
 
@@ -256,7 +262,11 @@ Full detail in `supabase/schema.sql`.
   dropped on deactivation; `todos` — the owner and `shared_with` people
   read and edit, only the owner deletes, leaving is `todo_leave`; `todos_guard`
   stamps the owner, keeps active people, ties only to visible issues / projects
-  (an issue's todo takes the issue's project); `saved_filters` — private or shared;
+  (an issue's todo takes the issue's project); `todo_lists` — each person's
+  own, private even from admins (the Inbox is no row: unfiled todos);
+  `todo_places` — per person, which of their lists a todo they're on sits
+  in (a composite key keeps it to their own lists; deleting a list sends
+  its todos back to the Inbox); `saved_filters` — private or shared;
   `notes` + `note_labels` — private to the owner even from admins; `notes_guard`
   stamps the owner, keeps only own labels and visible projects, and moves
   `updated_at` only on title / text, stamps `archived_at` (and unpins);

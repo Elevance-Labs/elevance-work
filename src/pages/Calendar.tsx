@@ -12,7 +12,7 @@ import type { Issue, Release, Todo } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { PageHeader } from '../components/common'
 import CalendarView, { type Layer } from '../components/calendar/CalendarView'
-import { TODO_COLUMNS } from '../components/TodoList'
+import { TODO_COLUMNS } from '../lib/todos'
 
 const LAYERS: Layer[] = [
   { key: 'meeting', label: 'My meetings', on: true },

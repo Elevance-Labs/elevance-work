@@ -1,9 +1,9 @@
 // Notes: the notes page (search and filters), writing and changing notes,
 // archiving then deleting, your own labels, a project's notes, pinning, and a
-// meeting's note.
+// meeting's note; the toolbar on a phone.
 import {
   setupDom, reporter, text, button, buttons, checkbox, click, dialog, type, typeInto, field, labelled, chooseLabelled, choose, options, navLabels,
-  freezeToday, waitFor, settle,
+  freezeToday, waitFor, settle, setScreen,
 } from './setup'
 setupDom()
 
@@ -242,5 +242,18 @@ await click(button('Close', dialog()!))
 check('…but it can be unlinked', captured.updates.some((u) => u.table === 'notes' && u.values.meeting_id === null &&
   JSON.stringify(u.filters) === '[["id","eq","nt-standup"]]'))
 check('…after which it no longer names the meeting', await waitFor(() => !card('nt-standup')?.textContent?.includes('Standup ·')))
+
+// ---------------- on a phone ----------------
+setScreen({ width: 390 })
+reset()
+signInAs(PEOPLE.member)
+await mountApp('/notes')
+const bar = labelled('Search notes')!.closest('.MuiStack-root')!
+check('on a phone, search shares its row with icon buttons for Archived, Labels and New note',
+  ['Archived', 'Labels', 'New note'].every((l) => button(l, bar)?.classList.contains('MuiIconButton-root')), bar.textContent)
+check('…and the filters sit below, in a grid', !!labelled('Label')?.closest('[class*="MuiBox"]') && !bar.contains(labelled('Label')))
+await click(button('New note'))
+check('…New note still opens a note', !!dialog()?.textContent?.includes('New note'))
+setScreen({ width: 1280 })
 
 done()

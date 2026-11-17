@@ -84,5 +84,53 @@ select t.throws('a todo can''t be tied to a project you can''t see',
 select t.eq('…but an open one is fine',
   t.rows($$insert into public.todos (title, project_id) values ('Rota', t.project('OPS'))$$), 1::bigint);
 
+-- ---------------- lists ----------------
+select t.login('sara');
+insert into public.todo_lists (name) values ('  Work  ');
+select t.eq('a list is yours, its name trimmed',
+  (select owner_id::text || '|' || name from public.todo_lists), t.pid('sara')::text || '|Work');
+select t.throws('…one name once per person, whatever its case',
+  $$insert into public.todo_lists (name) values ('work')$$, '23505');
+select t.throws('…and only a valid colour', $$insert into public.todo_lists (name, color) values ('Home', 'red')$$, '23514');
+select t.throws('a list keeps its owner', $$update public.todo_lists set owner_id = t.pid('omar')$$, '42501');
+insert into public.todos (title, shared_with) values ('Book the venue', array[t.pid('omar')]);
+select public.todo_move((select id from public.todos where title = 'Book the venue'), (select id from public.todo_lists where name = 'Work'));
+select t.eq('a todo is filed in one of your lists',
+  (select list_id from public.todo_places), (select id from public.todo_lists where name = 'Work'));
+select t.throws('…only through todo_move', $$insert into public.todo_places (todo_id, profile_id, list_id)
+  select id, t.pid('sara'), (select id from public.todo_lists) from public.todos where title = 'Sara only'$$, '42501');
+select set_config('test.sara_list', (select id::text from public.todo_lists where name = 'Work'), false);
+
+select t.login('omar');
+insert into public.todo_lists (name) values ('Work');
+select t.eq('someone else''s lists and where they filed things stay private, even with the same name',
+  (select count(*) from public.todo_lists)::text || '|' || (select count(*) from public.todo_places)::text, '1|0');
+select t.eq('…so a todo you were put on sits in your Inbox',
+  (select count(*) from public.todos t where t.title = 'Book the venue'
+     and not exists (select 1 from public.todo_places p where p.todo_id = t.id)), 1::bigint);
+select public.todo_move((select id from public.todos where title = 'Book the venue'), (select id from public.todo_lists));
+select t.eq('…until you file it in a list of yours', (select count(*) from public.todo_places), 1::bigint);
+select t.throws('…never in someone else''s list',
+  $$select public.todo_move((select id from public.todos where title = 'Book the venue'),
+                            current_setting('test.sara_list')::uuid)$$, '42501', 'isn''t yours');
+select t.eq('…nor can you touch their lists',
+  t.rows($$update public.todo_lists set name = 'Mine' where id = current_setting('test.sara_list')::uuid$$) +
+  t.rows($$delete from public.todo_lists where id = current_setting('test.sara_list')::uuid$$), 0::bigint);
+
+select t.login('hina');
+select t.throws('someone not on a todo can''t file it',
+  $$select public.todo_move((select id from public.todos where title = 'Book the venue'), null)$$, '42501');
+
+select t.login('sara');
+select t.eq('each person has their own place for a shared todo', t.rows($$select 1 from public.todo_places$$), 1::bigint);
+select public.todo_move((select id from public.todos where title = 'Book the venue'), null);
+select t.eq('null puts it back in your Inbox', (select count(*) from public.todo_places), 0::bigint);
+select public.todo_move((select id from public.todos where title = 'Book the venue'), (select id from public.todo_lists));
+delete from public.todo_lists;
+select t.eq('deleting a list puts its todos back in the Inbox, not away',
+  (select count(*) from public.todos where title = 'Book the venue')::text || '|' || (select count(*) from public.todo_places)::text, '1|0');
+
 select t.as_anon();
 select t.throws('nothing for the anonymous key', $$select count(*) from public.todos$$, '42501');
+select t.throws('…nor its lists', $$select count(*) from public.todo_lists$$, '42501');
+select t.throws('…nor where todos sit', $$select public.todo_move(null, null)$$, '42501');

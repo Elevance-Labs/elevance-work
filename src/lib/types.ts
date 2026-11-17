@@ -287,6 +287,23 @@ export interface Todo {
   shared_with: string[]
 }
 
+/** One of a person's own todo lists (private). The Inbox is not one: it is every todo not filed in a list. */
+export interface TodoList {
+  id: string
+  owner_id: string
+  name: string
+  color: string
+  position: number
+  created_at: string
+}
+
+/** Which of your lists a todo sits in; per person (written only by todo_move). */
+export interface TodoPlace {
+  todo_id: string
+  profile_id: string
+  list_id: string
+}
+
 export interface NoteLabel {
   id: string
   owner_id: string

@@ -172,6 +172,16 @@ const TODOS: Row[] = [
     project_id: 'pr-web', position: 4, shared_with: [], created_at: at('2026-10-17') },
 ]
 
+// Sara's list (Book the photographer is filed in it) and one of Omar's.
+const TODO_LISTS: Row[] = [
+  { id: 'tl-work', owner_id: 'p-sara', name: 'Work', color: '#26a69a', position: 1, created_at: at('2026-10-01') },
+  { id: 'tl-omar', owner_id: 'p-omar', name: 'Omar list', color: '#5c6bc0', position: 1, created_at: at('2026-10-01') },
+]
+const TODO_PLACES: Row[] = [
+  { todo_id: 'td-2', profile_id: 'p-sara', list_id: 'tl-work' },
+  { todo_id: 'td-omar-shared', profile_id: 'p-omar', list_id: 'tl-omar' },
+]
+
 // Sara's labels and notes (one on WEB, pinned; one on Monday's standup, a
 // meeting in her Google Calendar), and one of Omar's that she must never see.
 const NOTE_LABELS: Row[] = [
@@ -232,7 +242,9 @@ function withEmbeds(table: string, row: Row): Row {
     }
     case 'todos': {
       const i = find('issues', row.issue_id)
-      return { ...row, issue: i ? { key: i.key, title: i.title } : null }
+      // Only your own place (todo_places_select).
+      const place = rowsIn('todo_places').filter((p) => p.todo_id === row.id && p.profile_id === me()?.id).map((p) => ({ list_id: p.list_id }))
+      return { ...row, issue: i ? { key: i.key, title: i.title } : null, place }
     }
     default:
       return row
@@ -243,6 +255,9 @@ function rowsOf(table: string): Row[] {
   if (table === 'projects') return rowsIn('projects').filter((p) => roleIn(p.id) !== null)
   // Mirror of todos_select: yours, and those you're on.
   if (table === 'todos') return rowsIn('todos').filter((t) => t.owner_id === me()?.id || (t.shared_with as string[]).includes(me()?.id ?? ''))
+  // Your own lists and places only.
+  if (table === 'todo_lists') return rowsIn(table).filter((l) => l.owner_id === me()?.id)
+  if (table === 'todo_places') return rowsIn(table).filter((p) => p.profile_id === me()?.id)
   return rowsIn(table)
 }
 
@@ -281,6 +296,8 @@ function insertDefaults(table: string, row: Row): Row {
       return { shared: false, ...row, owner_id: me()?.id }
     case 'note_labels':
       return { ...row, owner_id: me()?.id }
+    case 'todo_lists':
+      return { color: '#5c6bc0', position: Date.now(), created_at: now, ...row, name: String(row.name).trim(), owner_id: me()?.id }
     case 'notes':
       return { title: '', body: '', color: 'yellow', label_ids: [], project_id: null, pinned: false, meeting_id: null, meeting_title: null,
         meeting_on: null, ...row, owner_id: me()?.id, updated_at: now, archived_at: null }
@@ -331,6 +348,9 @@ export const realtime: { channel: string; handler: () => void }[] = []
 export function emitRealtime(channel: string) {
   for (const r of realtime.filter((x) => x.channel === channel)) r.handler()
 }
+
+/** How long writes take, for tests that look at a save in flight; reset() sets it back to 0. */
+export const latency = { writeMs: 0 }
 
 export const captured = {
   reads: [] as string[],
@@ -397,6 +417,7 @@ export function signInAs(who: Profile | null) {
 /** Reset every table, recording and auth to the fixtures. Call before each test. */
 export function reset() {
   const copy = (rows: Row[]) => rows.map((r) => structuredClone(r))
+  latency.writeMs = 0
   db = {
     profiles: copy(Object.values(PEOPLE) as unknown as Row[]),
     projects: copy(PROJECTS),
@@ -419,6 +440,8 @@ export function reset() {
     documents: [],
     saved_filters: [],
     todos: copy(TODOS),
+    todo_lists: copy(TODO_LISTS),
+    todo_places: copy(TODO_PLACES),
     note_labels: copy(NOTE_LABELS),
     notes: copy(NOTES),
     notifications: copy(NOTIFICATIONS),
@@ -604,6 +627,8 @@ class Query implements PromiseLike<Result> {
       case 'delete':
         rows = rowsIn(this.name).filter(this.matches)
         db[this.name] = rowsIn(this.name).filter((r) => !this.matches(r))
+        // A list's places cascade: its todos are back in the Inbox.
+        if (this.name === 'todo_lists') db.todo_places = rowsIn('todo_places').filter((p) => !rows.some((l) => l.id === p.list_id))
         break
     }
 
@@ -634,7 +659,9 @@ class Query implements PromiseLike<Result> {
     onfulfilled?: ((value: Result) => A | PromiseLike<A>) | null,
     onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
   ): PromiseLike<A | B> {
-    return Promise.resolve().then(() => this.execute()).then(onfulfilled, onrejected)
+    // A write can be held back (latency.writeMs) to see what a page shows while it saves.
+    const wait = this.op !== 'select' && latency.writeMs ? new Promise((r) => setTimeout(r, latency.writeMs)) : Promise.resolve()
+    return wait.then(() => this.execute()).then(onfulfilled, onrejected)
   }
 }
 
@@ -711,6 +738,14 @@ const RPCS: Record<string, (args: Row) => unknown> = {
   send_test_notification: () => {
     rowsIn('notifications').push({ id: `new-${nextId++}`, recipient_id: me()?.id, actor_id: null, kind: 'test', issue_id: null,
       comment_id: null, detail: null, read_at: null, created_at: new Date().toISOString() })
+    return null
+  },
+  // Mirror of todo_move: file a todo you're on in one of your lists, or (null) the Inbox.
+  todo_move: ({ p_todo, p_list }) => {
+    const places = rowsIn('todo_places')
+    const at = places.findIndex((p) => p.todo_id === p_todo && p.profile_id === me()?.id)
+    if (at >= 0) places.splice(at, 1)
+    if (p_list) places.push({ todo_id: p_todo, profile_id: me()?.id, list_id: p_list })
     return null
   },
   todo_leave: ({ p_todo }) => {

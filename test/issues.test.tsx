@@ -98,6 +98,18 @@ check('?issue=KEY opens the issue over the page', dialog()?.textContent?.include
 check('…with its parent epic in the breadcrumb', dialog()?.textContent?.includes('WEB-1'))
 check('…with a way to open it as a page', !!dialog()?.querySelector('[aria-label="Open as a page"]'))
 check('…its sub-task', dialog()?.textContent?.includes('Headline copy'))
+const quick = () => [...(labelled('Add to this issue', dialog()!)?.querySelectorAll('.MuiButton-root') ?? [])].map((b) => b.textContent).join()
+const headings = () => [...dialog()!.querySelectorAll('h2')].map((h) => h.textContent ?? '')
+check('empty sections fold into one row of buttons under the title', quick() === 'Link issue,Attach,Add doc', quick())
+check('…so no empty headings take room', !headings().some((h) => /^(Linked issues|Attachments|Docs)/.test(h)) &&
+  !dialog()?.textContent?.includes('No links.') && !dialog()?.textContent?.includes('No files.'))
+check('…while sections with something in them show', headings().some((h) => h.startsWith('Sub-tasks')) &&
+  !!labelled('New todo', dialog()!) && !labelled('New todo', dialog()!)?.closest('[hidden]'))
+await click(button('Link issue', dialog()!))
+check('a button opens its section, ready to add', headings().includes('Linked issues') && !!button('Cancel', dialog()!) &&
+  quick() === 'Attach,Add doc', quick())
+check('…and Attach opens the file picker (a label for the issue’s file input)',
+  button('Attach', dialog()!)?.tagName === 'LABEL' && button('Attach', dialog()!)?.getAttribute('for') === labelled('Attach files to the issue', dialog()!)?.id)
 check('…and its comment', dialog()?.textContent?.includes('Use the new photo'))
 check('…your todos on it, and the ones you were put on', await waitFor(() => !!document.querySelector('[data-todo="td-2"]')) &&
   dialog()?.textContent?.includes('Show 1 done') && !dialog()?.textContent?.includes('Omar private todo'))
@@ -201,6 +213,7 @@ await pickFile(new File(['x'], 'big.mov', { type: 'video/quicktime' }), 'Attach 
 check('the function’s refusal is shown', dialog()?.textContent?.includes('Files can be at most 25 MB.'))
 
 // Docs: link an existing one
+await click(button('Add doc', dialog()!))
 await click(button('Link existing', dialog()!))
 await type('Link', 'https://docs.google.com/document/d/abc123/edit')
 await type('Title', 'Hero spec')
@@ -216,6 +229,17 @@ await type('Title', 'Nope')
 await click(button('Link', dialog()!))
 check('…but only Google links', dialog()?.textContent?.includes('Paste a link to a Google Doc'))
 
+// An issue with nothing yet: every section folds away, todos included.
+await mountApp('/projects/WEB/issues?issue=WEB-6')
+await settleLazy()
+check('an issue with nothing yet is the title, a row of buttons, the description and comments',
+  await waitFor(() => quick() === 'Add sub-task,Link issue,Attach,Add doc,Add todo'), quick())
+check('…its empty todos folded away too', !!labelled('New todo', dialog()!)?.closest('[hidden]'))
+await click(button('Add todo', dialog()!))
+check('…Add todo opens them, the bar focused', !labelled('New todo', dialog()!)?.closest('[hidden]') && document.activeElement === labelled('New todo', dialog()!))
+await click(button('Add sub-task', dialog()!))
+check('…Add sub-task opens the sub-task form', !!labelled('New sub-task', dialog()!) && document.activeElement === labelled('New sub-task', dialog()!))
+
 // ---------------- what a viewer can't do ----------------
 reset()
 signInAs(PEOPLE.viewer)
@@ -224,7 +248,8 @@ await settleLazy()
 check('a viewer sees the issue read-only', !!dialog() && labelled<HTMLInputElement>('Status', dialog()!) === null &&
   !!dialog()!.querySelector('.MuiInputBase-root.Mui-disabled'))
 check('…can comment', !!button('Add a comment…', dialog()!))
-check('…but not attach or add docs', !button('Attach', dialog()!) && !button('Link existing', dialog()!))
+check('…but not attach or add docs', !button('Attach', dialog()!) && !button('Link existing', dialog()!) && !button('Add doc', dialog()!) &&
+  !button('Link issue', dialog()!))
 await click(button('Add a comment…', dialog()!))
 check('…not even to a comment', !button('Attach files', dialog()!) && !!button('Insert table', dialog()!))
 check('…nor delete it', !button('More actions', dialog()!))

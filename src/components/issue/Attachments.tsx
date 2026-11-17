@@ -171,11 +171,17 @@ export default function Attachments({
   attachments,
   role,
   onChange,
+  inputId,
+  collapsed,
 }: {
   issueId: string
   attachments: Attachment[]
   role: ProjectRole | null
   onChange: (rows: Attachment[]) => void
+  // The file input's id, so a label elsewhere (the quick-add Attach) opens it.
+  inputId?: string
+  // No files yet: only the (hidden) input, until an upload is under way or fails.
+  collapsed?: boolean
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState<string | null>(null)
@@ -197,6 +203,9 @@ export default function Attachments({
     if (input.current) input.current.value = ''
   }
 
+  const fileInput = <input ref={input} id={inputId} type="file" multiple hidden aria-label="Attach files to the issue" onChange={(e) => upload(e.target.files)} />
+  if (collapsed && !attachments.length && !uploading && !error) return fileInput
+
   return (
     <Section
       title={`Attachments${attachments.length ? ` (${attachments.length})` : ''}`}
@@ -208,7 +217,7 @@ export default function Attachments({
         </Tooltip>
       )}
     >
-      <input ref={input} type="file" multiple hidden aria-label="Attach files to the issue" onChange={(e) => upload(e.target.files)} />
+      {fileInput}
       {uploading && (
         <Box sx={{ mb: 1 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>Uploading {uploading} to Drive…</Typography>

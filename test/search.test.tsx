@@ -220,9 +220,11 @@ await settleLazy()
 check('a todo, by clicking it, which can be about a project', !!dialog()?.textContent?.includes('New todo') && !!field('Project (optional)', dialog()!))
 await type('Todo', 'Plan the offsite', dialog()!)
 await choose('Project (optional)', 'Operations', dialog()!)
+await choose('List', 'Work', dialog()!)
 await click(button('Add', dialog()!))
 const projectTodo = captured.inserts.filter((i) => i.table === 'todos').at(-1)?.rows[0]
 check('…saved with its project', projectTodo?.title === 'Plan the offsite' && projectTodo.project_id === 'pr-ops', JSON.stringify(projectTodo))
+check('…and filed in one of your lists', captured.rpcs.some((r) => r.name === 'todo_move' && r.args?.p_list === 'tl-work'))
 
 await shortcut('k')
 await letter('1')

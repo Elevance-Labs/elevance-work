@@ -12,11 +12,15 @@ import {
   Button,
   ButtonBase,
   Chip,
+  IconButton,
   InputAdornment,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
@@ -127,6 +131,7 @@ export default function NotesBoard({
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<{ note: NoteRow | null } | null>(null)
   const [managing, setManaging] = useState(false)
+  const phone = useMediaQuery(useTheme().breakpoints.down('sm'))
   const { projectId, pinned } = scope
 
   const load = useCallback(async () => {
@@ -186,22 +191,58 @@ export default function NotesBoard({
     </Button>
   )
 
+  // One row for search and actions (icons only on a phone), then the filters
+  // in an even grid that wraps: two across on a phone, as many as fit wider.
   const toolbar = !compact && (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 2, alignItems: { md: 'center' } }}>
-      <TextField placeholder="Search your notes" value={filter.text} onChange={(e) => setFilter({ text: e.target.value })}
-        sx={{ flexGrow: 1, maxWidth: { md: 360 } }}
-        slotProps={{
-          htmlInput: { 'aria-label': 'Search notes' },
-          input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> },
-        }} />
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-        <TextField select value={filter.label} onChange={(e) => setFilter({ label: e.target.value })} sx={{ minWidth: 150 }}
+    <Stack spacing={1.5} sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <TextField placeholder="Search your notes" value={filter.text} onChange={(e) => setFilter({ text: e.target.value })} size="small"
+          sx={{ flex: 1, minWidth: 0, maxWidth: { md: 420 } }}
+          slotProps={{
+            htmlInput: { 'aria-label': 'Search notes' },
+            input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> },
+          }} />
+        <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'block' } }} />
+        {phone ? (
+          <>
+            <Tooltip title={archive ? 'Back to your notes' : 'Archived'}>
+              <IconButton aria-label="Archived" aria-pressed={archive} color={archive ? 'primary' : 'default'}
+                onClick={() => setFilter({ archived: !archive })}>
+                <ArchiveOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Labels">
+              <IconButton aria-label="Labels" onClick={() => setManaging(true)}><LabelOutlinedIcon /></IconButton>
+            </Tooltip>
+            {!archive && (
+              <Tooltip title="New note">
+                <IconButton aria-label="New note" color="primary" onClick={() => setOpen({ note: null })}
+                  sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' } }}>
+                  <AddIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+          </>
+        ) : (
+          <>
+            <Button startIcon={<ArchiveOutlinedIcon />} variant={archive ? 'outlined' : 'text'} aria-pressed={archive}
+              onClick={() => setFilter({ archived: !archive })} sx={{ flexShrink: 0 }}>
+              Archived
+            </Button>
+            <Button startIcon={<LabelOutlinedIcon />} onClick={() => setManaging(true)} sx={{ flexShrink: 0 }}>Labels</Button>
+            {!archive && <Box sx={{ flexShrink: 0 }}>{newButton}</Box>}
+          </>
+        )}
+      </Stack>
+      <Box sx={{ display: 'grid', gap: 1, alignItems: 'center',
+        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fill, minmax(150px, 190px))' } }}>
+        <TextField select size="small" fullWidth value={filter.label} onChange={(e) => setFilter({ label: e.target.value })}
           slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Label' } }}>
           <MenuItem value="">All labels</MenuItem>
           {labels.map((l) => <MenuItem key={l.id} value={l.id}>{l.name}</MenuItem>)}
           <MenuItem value="none">No label</MenuItem>
         </TextField>
-        <TextField select value={filter.color} onChange={(e) => setFilter({ color: e.target.value as NoteFilter['color'] })} sx={{ minWidth: 130 }}
+        <TextField select size="small" fullWidth value={filter.color} onChange={(e) => setFilter({ color: e.target.value as NoteFilter['color'] })}
           slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Colour' } }}>
           <MenuItem value="">Any colour</MenuItem>
           {NOTE_COLOR_KEYS.map((c) => (
@@ -213,23 +254,16 @@ export default function NotesBoard({
           ))}
         </TextField>
         {!projectId && (
-          <TextField select value={filter.project} onChange={(e) => setFilter({ project: e.target.value })} sx={{ minWidth: 150 }}
+          <TextField select size="small" fullWidth value={filter.project} onChange={(e) => setFilter({ project: e.target.value })}
             slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Project' } }}>
             <MenuItem value="">All projects</MenuItem>
             {projects.filter((p) => !p.archived_at || p.id === filter.project).map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
           </TextField>
         )}
-        {!isNoteFilterEmpty(filter) && <Button onClick={() => setFilter({ ...EMPTY_NOTE_FILTER, archived: archive })}>Clear</Button>}
-      </Stack>
-      <Box sx={{ flexGrow: 1 }} />
-      <Stack direction="row" spacing={1}>
-        <Button startIcon={<ArchiveOutlinedIcon />} variant={archive ? 'outlined' : 'text'} aria-pressed={archive}
-          onClick={() => setFilter({ archived: !archive })}>
-          Archived
-        </Button>
-        <Button startIcon={<LabelOutlinedIcon />} onClick={() => setManaging(true)}>Labels</Button>
-        {!archive && newButton}
-      </Stack>
+        {!isNoteFilterEmpty(filter) && (
+          <Box><Button onClick={() => setFilter({ ...EMPTY_NOTE_FILTER, archived: archive })}>Clear</Button></Box>
+        )}
+      </Box>
     </Stack>
   )
 
