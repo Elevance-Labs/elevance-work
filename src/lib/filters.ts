@@ -105,6 +105,14 @@ export function filterFromSearch(params: URLSearchParams): IssueFilter {
   return filterFromQuery(query)
 }
 
+/**
+ * The filter part of an Issues page address, normalised: a saved filter's
+ * query, or the current search string. Two that match are the same view.
+ */
+export function viewSearch(from: Record<string, unknown> | URLSearchParams): string {
+  return filterToSearch(from instanceof URLSearchParams ? filterFromSearch(from) : filterFromQuery(from)).toString()
+}
+
 export function isEmptyFilter(filter: IssueFilter, ignore: (keyof IssueFilter)[] = ['sort']) {
   return Object.keys(filterToQuery(filter)).every((k) => ignore.includes(k as keyof IssueFilter))
 }

@@ -241,6 +241,11 @@ function withEmbeds(table: string, row: Row): Row {
       const c = find('comments', row.comment_id)
       return { ...row, issue: i ? { key: i.key, title: i.title } : null, comment: c ? { body: c.body } : null }
     }
+    case 'saved_filter_pins': {
+      // The pinned filter, if you can still read it (saved_filters_select).
+      const f = rowsOf('saved_filters').find((x) => x.id === row.filter_id)
+      return { ...row, filter: f ? structuredClone(f) : null }
+    }
     case 'todos': {
       const i = find('issues', row.issue_id)
       // Only your own place (todo_places_select).
@@ -259,6 +264,9 @@ function rowsOf(table: string): Row[] {
   // Your own lists and places only.
   if (table === 'todo_lists') return rowsIn(table).filter((l) => l.owner_id === me()?.id)
   if (table === 'todo_places') return rowsIn(table).filter((p) => p.profile_id === me()?.id)
+  // Your filters and shared ones; your own pins.
+  if (table === 'saved_filters') return rowsIn(table).filter((f) => f.owner_id === me()?.id || f.shared)
+  if (table === 'saved_filter_pins') return rowsIn(table).filter((p) => p.profile_id === me()?.id)
   return rowsIn(table)
 }
 
@@ -294,7 +302,9 @@ function insertDefaults(table: string, row: Row): Row {
         // todos_guard: an issue's todo is in the issue's project.
         ...(row.issue_id ? { project_id: find('issues', row.issue_id)?.project_id ?? null } : {}) }
     case 'saved_filters':
-      return { shared: false, ...row, owner_id: me()?.id }
+      return { shared: false, created_at: now, ...row, owner_id: me()?.id }
+    case 'saved_filter_pins':
+      return { position: Date.now(), created_at: now, ...row, profile_id: me()?.id }
     case 'note_labels':
       return { ...row, owner_id: me()?.id }
     case 'todo_lists':
@@ -440,6 +450,7 @@ export function reset() {
     attachments: [],
     documents: [],
     saved_filters: [],
+    saved_filter_pins: [],
     todos: copy(TODOS),
     todo_lists: copy(TODO_LISTS),
     todo_places: copy(TODO_PLACES),
@@ -749,6 +760,18 @@ const RPCS: Record<string, (args: Row) => unknown> = {
     if (at >= 0) places.splice(at, 1)
     if (p_list) places.push({ todo_id: p_todo, profile_id: me()?.id, list_id: p_list })
     return null
+  },
+  // Mirror of watched_activity: per issue you watch (and can see), its latest change or comment.
+  watched_activity: ({ p_limit }) => {
+    const mine = rowsIn('issue_watchers').filter((w) => w.profile_id === me()?.id).map((w) => w.issue_id)
+      .filter((id) => roleIn(find('issues', id)?.project_id) !== null)
+    const activity = [
+      ...rowsIn('issue_events').map((e) => ({ issue_id: e.issue_id, at: e.created_at, actor_id: e.actor_id, kind: 'change', field: e.field, to_value: e.to_value })),
+      ...rowsIn('comments').map((c) => ({ issue_id: c.issue_id, at: c.created_at, actor_id: c.author_id, kind: 'comment', field: null, to_value: null })),
+    ].filter((a) => mine.includes(a.issue_id))
+    const latest = new Map<unknown, Row>()
+    for (const a of activity) if (!latest.has(a.issue_id) || String(a.at) > String(latest.get(a.issue_id)!.at)) latest.set(a.issue_id, a)
+    return [...latest.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, Number(p_limit ?? 50))
   },
   todo_leave: ({ p_todo }) => {
     const t = find('todos', p_todo)

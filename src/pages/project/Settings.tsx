@@ -472,7 +472,7 @@ function Danger() {
           if (typed !== project.key) return s.setError(`Type ${project.key} to confirm.`)
           if (await s.run(() => supabase.from('projects').delete().eq('id', project.id))) {
             await reload()
-            navigate('/projects')
+            navigate('/work')
           }
         }}
         onClose={() => setConfirming(false)}>

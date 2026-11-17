@@ -1,4 +1,5 @@
-import type { Issue, IssueLevel, IssueType, ProjectStatus, StatusCategory } from './types'
+import { PRIORITY_LABELS, formatDate } from './constants'
+import type { Issue, IssueLevel, IssuePriority, IssueType, ProjectStatus, StatusCategory } from './types'
 
 // What lists, boards and the backlog select. The description is only read by
 // the issue view (ISSUE_DETAIL_COLUMNS), since it can be large.
@@ -93,3 +94,37 @@ export const sumPoints = (issues: Pick<Issue, 'story_points'>[]) =>
 
 /** "/browse/KEY" — the issue's own page; `?issue=KEY` opens it over the current one. */
 export const issuePath = (key: string) => `/browse/${key}`
+
+// History (issue_events) in words: the issue's History and Work's Recent activity.
+export const HISTORY_FIELD_LABELS: Record<string, string> = {
+  status: 'Status',
+  assignee: 'Assignee',
+  priority: 'Priority',
+  type: 'Type',
+  sprint: 'Sprint',
+  release: 'Release',
+  parent: 'Parent',
+  story_points: 'Story points',
+  title: 'Summary',
+  due_date: 'Due date',
+  labels: 'Labels',
+  description: 'Description',
+}
+
+/** One side of a change, as shown: "None" for nothing, priorities and dates in words. */
+export function historyValue(field: string, v: string | null) {
+  if (v === null || v === '') return 'None'
+  if (field === 'priority') return PRIORITY_LABELS[v as IssuePriority] ?? v
+  if (field === 'due_date') return formatDate(v)
+  return v
+}
+
+/** What someone last did to an issue, after their name: "commented", "set Status to Done". */
+export function activityLine(a: { kind: 'change' | 'comment'; field: string | null; to_value: string | null }) {
+  if (a.kind === 'comment') return 'commented'
+  if (a.field === 'created') return 'created the issue'
+  if (a.field === 'description') return 'updated the description'
+  const field = a.field ?? ''
+  const label = HISTORY_FIELD_LABELS[field] ?? field
+  return a.to_value === null || a.to_value === '' ? `cleared ${label}` : `set ${label} to ${historyValue(field, a.to_value)}`
+}

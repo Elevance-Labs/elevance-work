@@ -10,7 +10,7 @@ import Todos from './pages/home/Todos'
 import Notes from './pages/home/Notes'
 import Calendar from './pages/Calendar'
 import Issues from './pages/Issues'
-import Projects from './pages/Projects'
+import Work from './pages/Work'
 import BrowseIssue from './pages/BrowseIssue'
 import ProjectLayout from './pages/project/ProjectLayout'
 import Summary from './pages/project/Summary'
@@ -25,6 +25,7 @@ import ProjectCalendar from './pages/project/ProjectCalendar'
 import ProjectDocs from './pages/project/Docs'
 import ProjectNotes from './pages/project/Notes'
 import ProjectSettings from './pages/project/Settings'
+import AdminLayout from './pages/admin/AdminLayout'
 import People from './pages/admin/People'
 import IssueTypes from './pages/admin/IssueTypes'
 import WorkspaceSettings from './pages/admin/Workspace'
@@ -45,7 +46,9 @@ export default function App() {
           <Route path="/notes" element={<Notes />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/issues" element={<Issues />} />
-          <Route path="/projects" element={<Projects />} />
+          <Route path="/work" element={<Work />} />
+          {/* Work replaced the projects list. */}
+          <Route path="/projects" element={<Navigate to="/work" replace />} />
           <Route path="/browse/:key" element={<BrowseIssue />} />
           {/* Each project page checks the project is visible; settings also that you administer it. */}
           <Route path="/projects/:key" element={<ProjectLayout />}>
@@ -63,11 +66,12 @@ export default function App() {
             <Route path="settings" element={<ProjectSettings />} />
           </Route>
           {isAdmin && (
-            <>
-              <Route path="/admin/people" element={<People />} />
-              <Route path="/admin/issue-types" element={<IssueTypes />} />
-              <Route path="/admin/workspace" element={<WorkspaceSettings />} />
-            </>
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Navigate to="/admin/people" replace />} />
+              <Route path="people" element={<People />} />
+              <Route path="issue-types" element={<IssueTypes />} />
+              <Route path="workspace" element={<WorkspaceSettings />} />
+            </Route>
           )}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

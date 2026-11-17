@@ -8,13 +8,14 @@ const { burndown, velocity, sprintReport, createdVsResolved, cumulativeFlow, sta
 const { monthGrid, calendarItems, datedWithin, currentMeeting, itemsOn, weekStart, weekDays, weekLabel, timedBlocks } = await import('../src/lib/calendar')
 const { EMPTY_FILTER, applyFilter, filterFromSearch, filterToSearch, filterToQuery, filterFromQuery, matchesFilter, issuesToCsv } =
   await import('../src/lib/filters')
-const { rankBetween, rankForIndex, parseIssueKey, normaliseLabels } = await import('../src/lib/issues')
+const { rankBetween, rankForIndex, parseIssueKey, normaliseLabels, activityLine } = await import('../src/lib/issues')
 const { docTypeFromUrl, embedUrl } = await import('../src/lib/drive')
 const { sanitizeHtml, mentionedIds, isBlankHtml } = await import('../src/lib/richText')
 const { releaseNotes, notesText, releaseCountdown } = await import('../src/lib/releases')
 const { roleIn } = await import('../src/lib/permissions')
 const { suggestKey } = await import('../src/lib/projects')
 const { matchesWords, searchTodos, searchNotes, isShortcut } = await import('../src/lib/search')
+const { viewSearch } = await import('../src/lib/filters')
 const todosLib = await import('../src/lib/todos')
 type Issue = import('../src/lib/types').Issue
 type IssueEvent = import('../src/lib/types').IssueEvent
@@ -348,5 +349,18 @@ check('Cmd or Ctrl with the letter is a shortcut; the letter alone, or with Shif
   check('smart views shown: all at first, then as chosen, unknown ones ignored',
     parseSmartViews(null).join() === 'today,tomorrow,week' && parseSmartViews('').join() === '' && parseSmartViews('week,bogus').join() === 'week')
 }
+
+// ---------------- pinned views and recent activity ----------------
+check('a saved filter and the address showing it are the same view, whatever the order or extras',
+  viewSearch({ assignees: ['me'], resolution: 'unresolved' }) === viewSearch(new URLSearchParams('resolution=unresolved&issue=WEB-1&assignees=me')))
+check('…and different filters are different views',
+  viewSearch({ assignees: ['me'] }) !== viewSearch(new URLSearchParams('assignees=me&resolution=unresolved')))
+check('the last thing done to an issue, in words',
+  activityLine({ kind: 'comment', field: null, to_value: null }) === 'commented' &&
+  activityLine({ kind: 'change', field: 'created', to_value: 'WEB-1' }) === 'created the issue' &&
+  activityLine({ kind: 'change', field: 'status', to_value: 'Done' }) === 'set Status to Done' &&
+  activityLine({ kind: 'change', field: 'priority', to_value: 'high' }) === 'set Priority to High' &&
+  activityLine({ kind: 'change', field: 'assignee', to_value: null }) === 'cleared Assignee',
+  activityLine({ kind: 'change', field: 'priority', to_value: 'high' }))
 
 done()

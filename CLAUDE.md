@@ -15,18 +15,22 @@ behaviour).
 - Modules: **projects** (Scrum / Kanban), **issues** (types by level, custom
   fields, links, watchers, history), **board**, **backlog** and **sprints**,
   **timeline** (epics), **releases** (with notes), **summary**, **reports**, **docs** (Google Drive),
-  **issue lists and saved filters**, **calendar** (meetings only from each
+  **issue lists and saved filters** (pinned to the navigation per person), **calendar** (meetings only from each
   person's own Google Calendar, read-only; beside them epics, issues,
   releases and todos; no app-made events; release dates pushed to the
   company Google Calendar; also a project tab), **todos** (yours plus the
   people you add; shown on their issue; optionally a project; filed per
   person in an Inbox or private lists; Today / Tomorrow / This week views), **notes**
-  (private; own labels; pinned to the dashboard; linked to a project and/or
+  (private; own labels; pinned to Home; linked to a project and/or
   one Google meeting), **search** (Cmd/Ctrl+S) and **create** (Cmd/Ctrl+K),
-  **dashboard** (the meeting now with its note; agenda, todos, issues,
-  pinned notes), **notifications** (in-app, live; pushed to devices; Google
+  **Home** (the meeting now with its note; agenda, todos, issues,
+  pinned notes; on a phone a compact day view), **Work** (your project
+  cards; My issues and Recent activity on what you watch), **notifications** (in-app, live; pushed to devices; Google
   Chat), **admin**
-  (people, issue types, workspace).
+  (people, issue types, workspace; a header button, admins only).
+- Navigation: the sidebar is Home, Calendar, Work, Todos, Notes, then
+  Issues with your pinned views. Below `md` a bottom bar (`BottomNav`) holds
+  Home, Work, Todos, Notes; the drawer keeps the full sidebar.
 - Stack: **React 19 + Vite + MUI + TypeScript** on the front, **Supabase**
   (Postgres + RLS, Auth, Realtime, Edge Functions) behind it.
 - Deployed as a static SPA to **GitHub Pages**; `HashRouter`.
@@ -97,6 +101,9 @@ behaviour).
   foot, via `components/useNavCollapsed`, one localStorage key shared by the
   apps; the first load is the app's icon over a running bar, `Splash` in `components/common`)
   match Work, Support and People. A change to either belongs in all three.
+  One exception for now: the phone bottom bar (`components/BottomNav`) and
+  the Admin header button are Work's alone, to move to the siblings once
+  settled.
 - **Light, dark or system.** `theme.ts` has both colour schemes (no CSS
   variables, so `theme.palette` is the mode in use); `ThemeProvider` takes
   `themeSettings` (one localStorage key, `elevance.theme`, shared by the
@@ -131,16 +138,18 @@ behaviour).
 | Path | Role |
 |---|---|
 | `src/pages/` | One file per route. Fetches its own data, owns page state. |
-| `src/pages/home/` | Dashboard, Todos, Notes. |
+| `src/pages/` (top) | `Work` (project cards, My issues / Recent activity, `?tab=`), Issues, Calendar, BrowseIssue, Login. |
+| `src/pages/home/` | Dashboard (Home: wide panels, or `PhoneHome` below `md`), Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
-| `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/pages/admin/` | `AdminLayout` (tabs) over People, issue types, workspace settings (workspace admins). |
+| `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/home/` | Home's parts: `useAgenda` (meetings, releases, issues and todos due, overdue, noted meetings, ticking), `AgendaRow`, `NowPanel` / `NowCard` (the meeting now, wide / phone), `PhoneHome` (date line, meeting card with its note in a sheet, seven-day strip `?date=`, the day's agenda). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
-| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note-changed bus). |
+| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
 | `supabase/migrations/` | Ordered, timestamped changes, applied by `supabase db push`. |
 | `supabase/schema.sql` | The **whole current database** in one file. Kept in step with the migrations. |
@@ -153,15 +162,16 @@ behaviour).
 
 - No session → `Login` (Google only). After binding, everything sits inside
   `WorkspaceProvider` and `Layout`.
-- `/dashboard` (landing), `/issues` (filters in the URL), `/calendar`
-  (`?view=day|week&date=`, or `?month=`; week by default), `/todos` (`?list=inbox|today|tomorrow|week|<list id>`), `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one), `/projects`,
-  `/browse/:key` — everyone.
+- `/dashboard` (Home, landing; on a phone `?date=`), `/work` (`?tab=activity`), `/issues` (filters in the URL), `/calendar`
+  (`?view=day|week&date=`, or `?month=`; week by default), `/todos` (`?list=inbox|today|tomorrow|week|<list id>`), `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one),
+  `/browse/:key` — everyone. `/projects` redirects to `/work`.
 - `/projects/:key` → Summary; `/backlog` (Scrum only; Kanban redirects to
   board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`, `/releases`, `/releases/:releaseId`,
   `/reports` (`?report=&sprint=`), `/docs`, `/notes` (your own), `/settings` (`?tab=`; project admins,
   others redirected). A project RLS hides reads as "no project you can see".
-- `/admin/people`, `/admin/issue-types`, `/admin/workspace` — workspace admins;
-  gated by not registering the routes in `src/App.tsx`, and hidden in the nav.
+- `/admin` (→ `/admin/people`), `/admin/issue-types`, `/admin/workspace` — workspace admins,
+  under `AdminLayout`; gated by not registering the routes in `src/App.tsx`;
+  reached from the header's Admin button (admins only).
 - `?issue=KEY` on any route opens the issue (`IssueDialog`, lazy, in
   `Layout`): a dialog or a non-modal right-hand side panel, as the person
   chose from the issue (`profiles.issue_view`); a phone is always full
@@ -183,7 +193,8 @@ behaviour).
 | `WorkspaceProvider` | profiles, issue types, visible projects + statuses, my memberships, active sprints, lookups, `roleOf`, `reload` | Signed in |
 | `useProjectMeta(projectId)` | members, fields, sprints, releases; `invalidateProjectMeta` after writes | Per project, cached |
 | `issueEvents` | `emitIssueChange` / `useIssueChanges`: pages reload after the dialogs write | Signed in |
-| `itemEvents` | `emitItemChange` / `useItemChanges` (todo, note): pages reload after Create, a meeting's note or a calendar todo writes | Signed in |
+| `itemEvents` | `emitItemChange` / `useItemChanges` (todo, note, view): pages reload after Create, a meeting's note or a calendar todo writes; the navigation after a pin | Signed in |
+| `usePinnedViews` | your pinned saved filters (unreadable ones dropped); `setPinned` | Layout, Issues page |
 | `NotificationsProvider` | `useNotifications()`: your latest notifications (Realtime, a push arriving, back to the front), unread count + app-icon badge, `markRead` / `markIssueRead` (the issue view, on open) / `markAllRead`; no-ops outside a provider | Signed in |
 | `projectContext` | `useProject()` → project and your role | Project pages |
 | `layoutContext` | `useLayout().openCreate` | Inside `Layout` |
@@ -202,9 +213,11 @@ behaviour).
   `assignable`.
 - `issues.ts` — select column lists, the client write shape, key parsing, ranks
   (`rankBetween` / `rankForIndex`; null → rerank), level and category helpers,
-  label normalising.
-- `filters.ts` — the filter model, URL / saved-filter forms, `applyFilter`
-  (PostgREST query), `matchesFilter` (loaded rows), CSV.
+  label normalising, history in words (`HISTORY_FIELD_LABELS`,
+  `historyValue`, `activityLine`).
+- `filters.ts` — the filter model, URL / saved-filter forms, `viewSearch`
+  (a pinned view's normalised address), `applyFilter` (PostgREST query),
+  `matchesFilter` (loaded rows), CSV.
 - `fields.ts` — which custom fields apply to a type, required checks.
 - `reports.ts` — history replay (`stateAt`), burndown, velocity, sprint report,
   created vs resolved, cumulative flow, breakdowns, workload, recent counts.
@@ -273,6 +286,10 @@ Full detail in `supabase/schema.sql`.
   `todo_places` — per person, which of their lists a todo they're on sits
   in (a composite key keeps it to their own lists; deleting a list sends
   its todos back to the Inbox); `saved_filters` — private or shared;
+  `saved_filter_pins` — per person, a filter they can read pinned to the
+  navigation (stamped to the caller; private; goes with the filter);
+  `watched_activity()` — RPC, security invoker: per watched issue its
+  latest change or comment (Work's Recent activity);
   `notes` + `note_labels` — private to the owner even from admins; `notes_guard`
   stamps the owner, keeps only own labels and visible projects, and moves
   `updated_at` only on title / text, stamps `archived_at` (and unpins);

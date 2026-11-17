@@ -44,7 +44,6 @@ const ticked = captured.updates.find((u) => u.table === 'todos')
 check('a todo can be ticked off from the agenda', typeof ticked?.values.done_at === 'string' && JSON.stringify(ticked.filters) === '[["id","eq","td-1"]]')
 check('…and leaves it, and the todo card', await waitFor(() => !text().includes('Write the brief')))
 window.localStorage.removeItem('el-work:agenda-span')
-check('the active sprint’s progress', text().includes('Active sprints') && text().includes('1 of 3 done'))
 const panel = (id: string) => document.querySelector(`[data-panel="${id}"]`)
 check('four panels: agenda, todos, issues and pinned notes', ['agenda', 'todos', 'issues', 'notes'].every((id) => !!panel(id)))
 check('pinned notes show, and only those', await waitFor(() => !!panel('notes')?.textContent?.includes('Launch plan')) &&

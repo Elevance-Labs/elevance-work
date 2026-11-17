@@ -255,6 +255,25 @@ export interface SavedFilter {
   created_at: string
 }
 
+/** A saved filter someone pinned to the navigation (private to them). */
+export interface SavedFilterPin {
+  profile_id: string
+  filter_id: string
+  position: number
+  created_at: string
+}
+
+/** One row of watched_activity(): an issue you watch and its latest change or comment. */
+export interface WatchedActivity {
+  issue_id: string
+  at: string
+  actor_id: string | null
+  kind: 'change' | 'comment'
+  /** For a change: the history field (status, assignee, created…). */
+  field: string | null
+  to_value: string | null
+}
+
 // A meeting from your own Google Calendar, as the google-calendar function
 // hands it over (never stored). All-day end dates are inclusive. Each
 // occurrence of a repeating meeting has its own id.

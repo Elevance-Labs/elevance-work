@@ -24,29 +24,29 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined'
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined'
-import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined'
-import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuIcon from '@mui/icons-material/Menu'
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
-import PeopleOutlineIcon from '@mui/icons-material/PeopleOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined'
+import ViewKanbanOutlinedIcon from '@mui/icons-material/ViewKanbanOutlined'
 import { useAuth, useMe } from '../auth/AuthProvider'
 import { APP_NAME, APP_ROLE_LABELS } from '../lib/constants'
 import { isShortcut, shortcutLabel } from '../lib/search'
-import { useWorkspace } from '../workspace/WorkspaceProvider'
+import { viewSearch } from '../lib/filters'
+import { usePinnedViews } from '../workspace/usePinnedViews'
 import AppSwitcher from './AppSwitcher'
+import BottomNav, { BOTTOM_NAV_HEIGHT } from './BottomNav'
 import { useNavCollapsed } from './useNavCollapsed'
 import { Logo, PersonAvatar } from './common'
 import { InstallBanner, InstallNavButton } from './InstallApp'
-import { ProjectAvatar } from './IssueBits'
 import NotificationsBell from './NotificationsBell'
 import ThemeModeSwitch from './ThemeModeSwitch'
 import { onWorkerMessage, routerPath } from '../pwa'
@@ -70,21 +70,21 @@ interface NavItem {
   to: string
   label: string
   icon: ReactElement
+  /** Other paths (and what's under them) the item stands for. */
+  also?: string[]
 }
 
-const FOR_YOU: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: <DashboardOutlinedIcon /> },
-  { to: '/issues', label: 'Issues', icon: <FilterListOutlinedIcon /> },
+// The main areas. On a phone, Home, Work, Todos and Notes are also the
+// bottom bar (BottomNav); Calendar is reached from Home there.
+const MAIN: NavItem[] = [
+  { to: '/dashboard', label: 'Home', icon: <HomeOutlinedIcon /> },
   { to: '/calendar', label: 'Calendar', icon: <CalendarMonthOutlinedIcon /> },
+  { to: '/work', label: 'Work', icon: <ViewKanbanOutlinedIcon />, also: ['/projects', '/browse'] },
   { to: '/todos', label: 'Todos', icon: <ChecklistOutlinedIcon /> },
   { to: '/notes', label: 'Notes', icon: <StickyNote2OutlinedIcon /> },
 ]
 
-const ADMIN: NavItem[] = [
-  { to: '/admin/people', label: 'People', icon: <PeopleOutlineIcon /> },
-  { to: '/admin/issue-types', label: 'Issue types', icon: <CategoryOutlinedIcon /> },
-  { to: '/admin/workspace', label: 'Workspace', icon: <AdminPanelSettingsOutlinedIcon /> },
-]
+const under = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`)
 
 /** Looks like a search box; opens search (as Cmd/Ctrl+S does). */
 function SearchButton({ onOpen }: { onOpen: () => void }) {
@@ -106,7 +106,7 @@ function SearchButton({ onOpen }: { onOpen: () => void }) {
 export default function Layout() {
   const me = useMe()
   const { signOut, isAdmin } = useAuth()
-  const { projects } = useWorkspace()
+  const pinnedViews = usePinnedViews()
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('lg'))
   const wide = useMediaQuery(theme.breakpoints.up('md'))
@@ -157,11 +157,14 @@ export default function Layout() {
   }), [navigate, pathname])
 
   const actions = useMemo<LayoutActions>(() => ({ openCreate: (defaults = {}) => setCreate(defaults) }), [])
-  const current = projects.filter((p) => !p.archived_at)
-  const projectInPath = /^\/projects\/([A-Z0-9]+)/.exec(pathname)?.[1]
+  // Under Issues: the whole list, then your pinned views; one of them is
+  // current when the address shows its filter.
+  const viewHere = pathname === '/issues' ? viewSearch(new URLSearchParams(search)) : null
+  const pinnedHere = pinnedViews.find((v) => viewSearch(v.filter.query) === viewHere)
+  const phone = !wide
 
   const item = (i: NavItem, selected: boolean) => (
-    <Tooltip key={i.to} title={rail ? i.label : ''} placement="right">
+    <Tooltip key={`${i.to}|${i.label}`} title={rail ? i.label : ''} placement="right">
       <ListItemButton
         component={Link}
         to={i.to}
@@ -194,34 +197,16 @@ export default function Layout() {
       <Toolbar />
       {/* On a phone the offer to install leads the navigation, until dismissed. */}
       {!desktop && <InstallBanner />}
-      <List sx={listSx} subheader={subheader('For you')}>
-        {FOR_YOU.map((i) => item(i, pathname === i.to || pathname.startsWith(`${i.to}/`)))}
+      <List sx={{ ...listSx, pt: 1.5 }}>
+        {MAIN.map((i) => item(i, [i.to, ...(i.also ?? [])].some((p) => under(pathname, p))))}
       </List>
-      <List sx={listSx} subheader={subheader('Projects')}>
-        {item({ to: '/projects', label: 'All projects', icon: <FolderOutlinedIcon /> }, pathname === '/projects')}
-        {current.map((p) => (
-          <Tooltip key={p.id} title={rail ? p.name : ''} placement="right">
-            <ListItemButton
-              component={Link}
-              to={`/projects/${p.key}`}
-              selected={projectInPath === p.key}
-              aria-label={p.name}
-              onClick={() => setMobileOpen(false)}
-              sx={{ borderRadius: 2, mb: 0.5, justifyContent: rail ? 'center' : 'flex-start', '&.Mui-selected': { color: 'primary.main' } }}
-            >
-              <ListItemIcon sx={{ minWidth: rail ? 0 : 40 }}>
-                <ProjectAvatar project={p} />
-              </ListItemIcon>
-              {!rail && <ListItemText primary={p.name} slotProps={{ primary: { sx: { fontWeight: 500 }, noWrap: true } }} />}
-            </ListItemButton>
-          </Tooltip>
-        ))}
+      <List sx={listSx} subheader={subheader('Issues')}>
+        {item({ to: '/issues', label: 'All issues', icon: <FilterListOutlinedIcon /> }, pathname === '/issues' && !pinnedHere)}
+        {pinnedViews.map((v) => {
+          const q = viewSearch(v.filter.query)
+          return item({ to: q ? `/issues?${q}` : '/issues', label: v.filter.name, icon: <BookmarkBorderIcon /> }, v === pinnedHere)
+        })}
       </List>
-      {isAdmin && (
-        <List sx={listSx} subheader={subheader('Admin')}>
-          {ADMIN.map((i) => item(i, pathname.startsWith(i.to)))}
-        </List>
-      )}
       {/* Pinned to the foot of the navigation, where it stays put whether the
           navigation is folded or not. Not a page, so not a list item. Install
           shares the row, after Collapse; on the rail it sits above it. */}
@@ -293,6 +278,15 @@ export default function Layout() {
               )}
             </Tooltip>
             <NotificationsBell />
+            {/* Workspace admin (people, issue types, settings): its own page. */}
+            {isAdmin && (
+              <Tooltip title="Admin">
+                <IconButton component={Link} to="/admin" aria-label="Admin"
+                  color={pathname.startsWith('/admin') ? 'primary' : 'default'}>
+                  <AdminPanelSettingsOutlinedIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             <ButtonBase
               onClick={(e) => setUserMenu(e.currentTarget)}
               aria-label="Account menu"
@@ -359,11 +353,19 @@ export default function Layout() {
           {drawer}
         </Drawer>
 
-        <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, md: 3 } }}>
+        <Box component="main" sx={{
+          flexGrow: 1, minWidth: 0, p: { xs: 2, md: 3 },
+          // Clear of the bottom bar (below md, as the bar is). Responsive like
+          // `p`, so it lands in the same media query after it: a plain `pb`
+          // would be overridden by `p`'s xs padding and leave the end of the
+          // page behind the bar.
+          pb: { xs: `calc(${BOTTOM_NAV_HEIGHT + 16}px + env(safe-area-inset-bottom))`, md: 3 },
+        }}>
           <Toolbar />
           <Outlet />
         </Box>
       </Box>
+      {phone && <BottomNav />}
       <Suspense fallback={null}>
         {openIssue && <IssueDialog issueKey={openIssue} />}
         {create && <CreateIssueDialog defaults={create} onClose={() => setCreate(null)} />}

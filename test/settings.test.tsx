@@ -125,7 +125,7 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
 keyInput.dispatchEvent(new Event('input', { bubbles: true }))
 await click(button('Delete for good', dialog()!))
 check('…then it goes', captured.deletes.some((d) => d.table === 'projects' && JSON.stringify(d.filters) === '[["id","eq","pr-web"]]'))
-check('…and you land on the projects', await waitFor(() => location.pathname === '/projects'), location.pathname)
+check('…and you land on Work', await waitFor(() => location.pathname === '/work'), location.pathname)
 
 // ---------------- creating a project ----------------
 reset()

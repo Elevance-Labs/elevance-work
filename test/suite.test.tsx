@@ -109,7 +109,7 @@ check('the account button is the avatar with the name and role beside it',
   account?.querySelector('.MuiAvatar-root') !== null && account?.textContent?.includes(PEOPLE.member.full_name) === true, account?.textContent ?? '')
 const selected = document.querySelector('.MuiDrawer-root .Mui-selected')
 check('the current page is tinted in the navigation, not filled',
-  selected !== null && selected.getAttribute('aria-label') === 'Dashboard', selected?.outerHTML.slice(0, 120))
+  selected !== null && selected.getAttribute('aria-label') === 'Home', selected?.outerHTML.slice(0, 120))
 
 const foot = document.querySelector('.MuiDrawer-root [aria-label="Collapse navigation"]')
 check('the collapse toggle sits at the foot of the navigation, after every page',

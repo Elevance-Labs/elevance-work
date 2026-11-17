@@ -24,7 +24,7 @@ export default function ProjectLayout() {
   if (!project) {
     return (
       <EmptyState title={`There's no project ${key.toUpperCase()} you can see`}>
-        It may be private, or the key may be wrong. <Link to="/projects">All projects</Link>
+        It may be private, or the key may be wrong. <Link to="/work">Your projects</Link>
       </EmptyState>
     )
   }

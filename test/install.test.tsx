@@ -128,7 +128,7 @@ check('a phone has no navigation foot', collapseButton() === null)
 await click(document.querySelector('[aria-label="Open navigation"]'))
 await settle()
 const offerBox = banner()
-const firstPage = document.querySelector('.MuiDrawer-root a[aria-label="Dashboard"]')
+const firstPage = document.querySelector('.MuiDrawer-root a[aria-label="Home"]')
 check('opened, the navigation leads with the offer',
   offerBox !== null && firstPage !== null && (offerBox.compareDocumentPosition(firstPage) & 4) !== 0)
 check('in iPhone words', offerBox?.textContent?.includes('home screen') === true && button('Add to Home Screen', offerBox!) !== undefined)
@@ -143,7 +143,7 @@ check('and is remembered in this browser', window.localStorage.getItem('el-work:
 await mountApp('/dashboard')
 await click(document.querySelector('[aria-label="Open navigation"]'))
 await settle()
-check('a fresh load does not bring it back', banner() === null && document.querySelector('.MuiDrawer-root a[aria-label="Dashboard"]') !== null)
+check('a fresh load does not bring it back', banner() === null && document.querySelector('.MuiDrawer-root a[aria-label="Home"]') !== null)
 
 window.localStorage.clear()
 setScreen({ displayMode: 'standalone' })

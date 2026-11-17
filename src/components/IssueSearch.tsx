@@ -1,6 +1,7 @@
 // Issue lists and filters: the global Issues page and each project's Issues
 // tab. The filter lives in the URL, so a filtered list is a link to share;
-// saved filters keep one by name, for yourself or shared with everyone.
+// saved filters keep one by name, for yourself or shared with everyone, and
+// any of them can be pinned to the navigation, under Issues.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -36,6 +37,8 @@ import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import DownloadIcon from '@mui/icons-material/Download'
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutlined'
+import PushPinIcon from '@mui/icons-material/PushPin'
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import { useMe } from '../auth/AuthProvider'
@@ -60,6 +63,8 @@ import type { Issue, SavedFilter, StatusCategory } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { useProjectMeta } from '../workspace/useProjectMeta'
 import { useIssueChanges } from '../workspace/issueEvents'
+import { emitItemChange } from '../workspace/itemEvents'
+import { setPinned, usePinnedViews } from '../workspace/usePinnedViews'
 import { EmptyState, FormDialog, Loading, PersonAvatar, PersonName } from './common'
 import { IssueKey, Labels, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
 import { useIssueHref } from './useIssueHref'
@@ -130,6 +135,8 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
   const [saveName, setSaveName] = useState('')
   const [saveShared, setSaveShared] = useState(false)
   const [busy, setBusy] = useState(false)
+  const pinned = new Set(usePinnedViews().map((v) => v.filter_id))
+  const [pinning, setPinning] = useState<string | null>(null)
 
   const setFilter = useCallback((next: Partial<IssueFilter>) => {
     const f = { ...filter, ...next }
@@ -191,6 +198,16 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
   async function deleteSaved(id: string) {
     await supabase.from('saved_filters').delete().eq('id', id)
     loadSaved()
+    // Its pin goes with it.
+    emitItemChange('view')
+  }
+
+  async function togglePin(id: string) {
+    if (pinning) return
+    setPinning(id)
+    const e = await setPinned(id, !pinned.has(id))
+    setPinning(null)
+    if (e) setError(e)
   }
 
   function exportCsv() {
@@ -338,6 +355,14 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
         >
           {s.shared && <ListItemIcon><PeopleOutlineIcon fontSize="small" /></ListItemIcon>}
           <ListItemText inset={!s.shared} primary={s.name} secondary={s.owner_id === me.id ? null : profileById(s.owner_id)?.full_name} />
+          <Tooltip title={pinned.has(s.id) ? 'Unpin from the navigation' : 'Pin to the navigation'}>
+            <IconButton size="small" edge="end" disabled={pinning === s.id} aria-pressed={pinned.has(s.id)}
+              aria-label={`${pinned.has(s.id) ? 'Unpin' : 'Pin'} ${s.name}`}
+              onClick={(e) => { e.stopPropagation(); togglePin(s.id) }}
+              sx={{ ml: 1, color: pinned.has(s.id) ? 'primary.main' : undefined }}>
+              {pinned.has(s.id) ? <PushPinIcon fontSize="small" /> : <PushPinOutlinedIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
           {s.owner_id === me.id && (
             <IconButton size="small" edge="end" aria-label={`Delete ${s.name}`} onClick={(e) => { e.stopPropagation(); deleteSaved(s.id) }}>
               <DeleteOutlineIcon fontSize="small" />

@@ -2,7 +2,7 @@
 // route, nav and tab gating for each role. The database enforces the same
 // rules (test/sql/access.test.sql); this proves the app does not offer what
 // it would refuse.
-import { setupDom, reporter, text, button, buttons, click, navLabels, freezeToday } from './setup'
+import { setupDom, reporter, text, button, buttons, click, navLabels, freezeToday, waitFor } from './setup'
 setupDom()
 
 const { mountApp, location } = await import('./app')
@@ -58,10 +58,11 @@ signInAs(PEOPLE.member)
 await mountApp('/')
 check('a member lands on the dashboard', location.pathname === '/dashboard', location.pathname)
 check('…greeted by name', text().includes('Sara'))
-check('a member is offered their pages and their projects, no admin',
-  navLabels().join() === 'Dashboard,Issues,Calendar,Todos,Notes,All projects,Operations,Website', navLabels().join())
+check('a member is offered the main areas and the issue list',
+  navLabels().join() === 'Home,Calendar,Work,Todos,Notes,All issues', navLabels().join())
+check('…and no Admin button', !document.querySelector('[aria-label="Admin"]'))
 
-for (const path of ['/admin/people', '/admin/issue-types', '/admin/workspace']) {
+for (const path of ['/admin', '/admin/people', '/admin/issue-types', '/admin/workspace']) {
   reset()
   signInAs(PEOPLE.member)
   await mountApp(path)
@@ -85,7 +86,11 @@ check('a Kanban project has no backlog: it goes to the board', location.pathname
 reset()
 signInAs(PEOPLE.outsider)
 await mountApp('/projects')
-check('someone in no project sees only the open one', navLabels().includes('Operations') && !navLabels().includes('Website'), navLabels().join())
+check('the old projects list is now Work', location.pathname === '/work', location.pathname)
+const cards = () => [...document.querySelectorAll('[data-project]')].map((c) => c.getAttribute('data-project')).join()
+check('someone in no project has no projects of their own', cards() === '' && text().includes('You aren’t in a project yet'), cards())
+await click(button('All projects'))
+check('…and All projects shows only the open one', cards() === 'OPS', cards())
 await mountApp('/projects/WEB')
 check('a private project they are not in does not exist for them', text().includes("There's no project WEB you can see"), text().slice(0, 300))
 
@@ -102,15 +107,22 @@ check('…nor a Create issue in the first column', !buttons('Create issue').leng
 reset()
 signInAs(PEOPLE.admin)
 await mountApp('/projects/WEB')
-check('an admin is offered the admin pages',
-  ['People', 'Issue types', 'Workspace'].every((l) => navLabels().includes(l)), navLabels().join())
 check('…and every project’s settings', tabs().includes('Settings'), tabs().join())
-await mountApp('/projects')
+const admin = document.querySelector<HTMLAnchorElement>('header a[aria-label="Admin"]')
+check('an admin has an Admin button in the header, not admin pages in the navigation',
+  !!admin && !navLabels().some((l) => ['People', 'Issue types', 'Workspace'].includes(l ?? '')), navLabels().join())
+await click(admin)
+check('…which opens the admin page on People', await waitFor(() => location.pathname === '/admin/people'), location.pathname)
+check('…with its tabs', tabs().join() === 'People,Issue types,Workspace', tabs().join())
+await click(document.querySelector('[role="tab"][href$="/admin/workspace"]'))
+check('…each its own page', await waitFor(() => location.pathname === '/admin/workspace'), location.pathname)
+await mountApp('/work')
 check('…and can create projects', !!button('Create project'))
+check('…seeing every project as a card', cards() === 'OPS,WEB', cards())
 
 reset()
 signInAs(PEOPLE.member)
-await mountApp('/projects')
+await mountApp('/work')
 check('a member can’t create projects', !button('Create project'))
 
 // ---------------- an archived project ----------------
