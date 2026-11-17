@@ -74,8 +74,8 @@ signInAs(PEOPLE.member)
 await mountApp('/projects/WEB/settings')
 check('a project member (not admin) is turned away from its settings', location.pathname === '/projects/WEB', location.pathname)
 check('…and offered no Settings tab', !tabs().includes('Settings'), tabs().join())
-check('a Scrum project has a backlog; every project its summary, board, timeline, issues, releases, reports, docs, your notes',
-  tabs().join() === 'Summary,Backlog,Board,Timeline,Calendar,Issues,Releases,Reports,Docs,My notes', tabs().join())
+check('a Scrum project has a backlog; every project its summary, board, timeline, calendar, issues, releases and docs',
+  tabs().join() === 'Summary,Backlog,Board,Timeline,Calendar,Issues,Releases,Docs', tabs().join())
 
 reset()
 signInAs(PEOPLE.member)

@@ -178,7 +178,22 @@ create table public.projects (
   archived_at     timestamptz,
   created_by      uuid references public.profiles (id) on delete set null,
   created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  updated_at      timestamptz not null default now(),
+  -- The parts its admins have turned off; one of Issues and Board stays on.
+  -- Turning one off only hides it in the app: no data changes.
+  disabled_features text[] not null default '{}'
+    constraint projects_disabled_features_check check (
+      disabled_features <@ array['timeline', 'calendar', 'issues', 'board', 'releases', 'docs']
+      and not disabled_features @> array['issues', 'board']),
+  -- The Summary's widgets, in order; null is the default for the kind. Only
+  -- the keys' shape is checked: the app ignores keys it doesn't know.
+  summary_widgets text[]
+    constraint projects_summary_widgets_check check (
+      summary_widgets is null
+      or cardinality(summary_widgets) = 0
+      or (cardinality(summary_widgets) <= 30
+          and array_position(summary_widgets, null) is null
+          and array_to_string(summary_widgets, ',') ~ '^[a-z_]{1,40}(,[a-z_]{1,40})*$'))
 );
 
 create table public.project_members (
@@ -1889,7 +1904,8 @@ grant update (email, full_name, title, app_role, active, issue_view) on public.p
 -- Projects are created only by project_create; key, counter and Drive folder
 -- are never client-writable.
 grant select, delete on public.projects to authenticated;
-grant update (name, description, kind, visibility, lead_id, color, archived_at) on public.projects to authenticated;
+grant update (name, description, kind, visibility, lead_id, color, archived_at, disabled_features, summary_widgets)
+  on public.projects to authenticated;
 
 grant select, delete on public.project_members to authenticated;
 grant insert (project_id, profile_id, role) on public.project_members to authenticated;

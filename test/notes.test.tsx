@@ -207,21 +207,10 @@ check('a renamed label shows its new name', !!card('nt-launch')?.textContent?.in
 reset()
 signInAs(PEOPLE.member)
 await mountApp('/projects/WEB/notes')
-check('a project has a My notes tab', buttons('My notes').length > 0 || text().includes('My notes'))
-check('it lists your notes on the project, and only yours (not archived ones)', JSON.stringify(cards()) === '["nt-launch"]' && !text().includes('Omar private'),
-  JSON.stringify(cards()))
-check('…asking for that project', captured.selects.some((s) => s.table === 'notes' &&
-  JSON.stringify(s.filters) === '[["owner_id","eq","p-sara"],["project_id","eq","pr-web"]]'))
-await click(button('New note'))
-await typeInto('Note', 'Ask about fonts', dialog()!)
-await click(button('Close', dialog()!))
-check('a note added there is linked to the project', captured.inserts.find((i) => i.table === 'notes')?.rows[0].project_id === 'pr-web')
-check('…and listed', await waitFor(() => cards().length === 2))
-
-await click(card('nt-launch'))
-await choose('Project', 'None', dialog()!)
-await click(button('Close', dialog()!))
-check('a note taken off the project leaves its list', await waitFor(() => !card('nt-launch')))
+check('a project has no notes tab: its address opens Notes filtered to it', await waitFor(() =>
+  location.pathname === '/notes' && location.search === '?project=pr-web'), location.pathname + location.search)
+check('…listing your notes on the project, and only yours (not archived ones)', await waitFor(() => JSON.stringify(cards()) === '["nt-launch"]') &&
+  !text().includes('Omar private'), JSON.stringify(cards()))
 
 // ---------------- pinning ----------------
 reset()

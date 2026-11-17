@@ -60,6 +60,7 @@ import {
   type SortKey,
 } from '../lib/filters'
 import type { Issue, SavedFilter, StatusCategory } from '../lib/types'
+import { featureOn } from '../lib/projectFeatures'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { useProjectMeta } from '../workspace/useProjectMeta'
 import { useIssueChanges } from '../workspace/issueEvents'
@@ -250,6 +251,8 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
     { value: 'none', label: 'No release' },
     ...(single && meta ? meta.releases.map((r) => ({ value: r.id, label: r.name })) : []),
   ]
+  // A project with Releases off doesn't offer the filter (one already set still shows, to clear it).
+  const releaseFilter = !single || featureOn(projectById(single), 'releases') || filter.releases.length > 0
   const emptyHere = isEmptyFilter(filter, projectId ? ['sort', 'projects'] : ['sort'])
   const showProject = !single
 
@@ -299,7 +302,9 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
           <Grid size={12}><MultiFilter label="Reporter" value={filter.reporters} onChange={(v) => setFilter({ reporters: v })}
             options={people.filter((p) => p.value !== 'none')} /></Grid>
           <Grid size={12}><MultiFilter label="Sprint" value={filter.sprints} onChange={(v) => setFilter({ sprints: v })} options={sprintOptions} /></Grid>
-          <Grid size={12}><MultiFilter label="Release" value={filter.releases} onChange={(v) => setFilter({ releases: v })} options={releaseOptions} /></Grid>
+          {releaseFilter && (
+            <Grid size={12}><MultiFilter label="Release" value={filter.releases} onChange={(v) => setFilter({ releases: v })} options={releaseOptions} /></Grid>
+          )}
           <Grid size={12}>
             <TextField fullWidth label="Labels" placeholder="comma, separated" defaultValue={filter.labels.join(', ')}
               onBlur={(e) => setFilter({ labels: e.target.value.split(',').map((l) => l.trim().toLowerCase()).filter(Boolean) })} />

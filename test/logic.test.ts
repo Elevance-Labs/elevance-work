@@ -1,10 +1,15 @@
-// The pure rules in src/lib: reports rebuilt from history, the calendar's
+// The pure rules in src/lib: reports rebuilt from history, the Summary's
+// judgements and widgets, project features, the calendar's
 // items and meetings, filters and their URL form, ranks, Google links, rich text, search, todo views.
 import { setupDom, reporter } from './setup'
 setupDom()
 
-const { burndown, velocity, sprintReport, createdVsResolved, cumulativeFlow, stateAt, breakdown, workload, recentCounts, unitFor } =
+const { burndown, velocity, sprintReport, createdVsResolved, cumulativeFlow, stateAt, unitFor } =
   await import('../src/lib/reports')
+const insights = await import('../src/lib/insights')
+const widgetsLib = await import('../src/lib/widgets')
+const features = await import('../src/lib/projectFeatures')
+const { timelineRows } = await import('../src/lib/timeline')
 const { monthGrid, calendarItems, datedWithin, currentMeeting, itemsOn, weekStart, weekDays, weekLabel, timedBlocks } = await import('../src/lib/calendar')
 const { EMPTY_FILTER, applyFilter, filterFromSearch, filterToSearch, filterToQuery, filterFromQuery, matchesFilter, issuesToCsv } =
   await import('../src/lib/filters')
@@ -97,12 +102,6 @@ check('created and resolved add up day by day', JSON.stringify(cr.map((p) => [p.
 const flow = cumulativeFlow([a, b], history, statuses, 1, '2026-10-07')
 check('cumulative flow counts by category as it was then', flow[0].todo === 2 && flow[0].done === 0, JSON.stringify(flow))
 
-check('breakdown keeps the given order', breakdown([a, b, issue('c', { status_id: 'doing' })], (i) => i.status_id, ['todo', 'doing', 'done'])
-  .map((s) => s.key).join() === 'todo,doing,done')
-check('workload counts open work per person', JSON.stringify(workload([issue('m', { assignee_id: 'p1', story_points: 2 }), issue('n', { assignee_id: 'p1' }),
-  issue('o', { resolved_at: '2026-10-01' })])) === '[{"assignee":"p1","issues":2,"points":2}]')
-check('recent counts look back seven days', recentCounts([issue('r', { created_at: '2026-10-20T10:00:00', updated_at: '2026-10-20T10:00:00' })], '2026-10-21')
-  .created === 1)
 
 // ---------------- the calendar ----------------
 const grid = monthGrid('2026-10')
@@ -362,5 +361,202 @@ check('the last thing done to an issue, in words',
   activityLine({ kind: 'change', field: 'priority', to_value: 'high' }) === 'set Priority to High' &&
   activityLine({ kind: 'change', field: 'assignee', to_value: null }) === 'cleared Assignee',
   activityLine({ kind: 'change', field: 'priority', to_value: 'high' }))
+
+// ---------------- the Summary's judgements (insights) ----------------
+{
+  const at = (day: string, time = '10:00') => `${day}T${time}:00`
+  const T = (id: string, level: 'epic' | 'standard' | 'subtask') =>
+    ({ id, name: id, level, icon: 'task', color: '#000', archived: false }) as import('../src/lib/types').IssueType
+  const types = [T('t', 'standard'), T('ep', 'epic'), T('sub', 'subtask')]
+  check('work items are the standard level only',
+    insights.workItems([issue('w'), issue('e', { type_id: 'ep' }), issue('s', { type_id: 'sub' })], types).map((i) => i.id).join() === 'w')
+
+  // Cycle time: from the first move into progress, else from creation.
+  const moved = issue('m', { created_at: at('2026-10-01'), resolved_at: at('2026-10-06'), status_id: 'done' })
+  const never = issue('n', { created_at: at('2026-10-01'), resolved_at: at('2026-10-03'), status_id: 'done' })
+  const byIssue = insights.groupEvents([
+    ev('m', 'status', at('2026-10-04'), 'todo', 'doing'),
+    ev('m', 'status', at('2026-10-05'), 'doing', 'todo'),
+    ev('m', 'status', at('2026-10-05', '12:00'), 'todo', 'doing'),
+    ev('m', 'status', at('2026-10-06'), 'doing', 'done'),
+  ])
+  check('cycle time runs from the first move into progress', insights.cycleDays(moved, byIssue, statuses) === 2)
+  check('…or from creation when it never showed as in progress', insights.cycleDays(never, byIssue, statuses) === 2)
+  check('…and an open issue has none', insights.cycleDays(issue('o'), byIssue, statuses) === null)
+  check('median and percentile', insights.median([5, 1, 3]) === 3 && insights.median([1, 2, 3, 4]) === 2.5 &&
+    insights.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.85) === 9)
+  check('aging waits for five finished items, then uses their 85th percentile',
+    insights.agingThreshold([1, 2]) === 14 && insights.agingThreshold([1, 2, 3, 4, 10]) === 10 &&
+    insights.agingThreshold([1, 2, 2, 2, 3, 4, 10]) === 4)
+
+  const weeks = insights.flowSeries([moved, never], byIssue, statuses, 3, '2026-10-07')
+  check('flow counts what finished each week, oldest first', weeks.map((w) => w.completed).join() === '0,0,2' && weeks[2].medianCycle === 2,
+    JSON.stringify(weeks))
+  check('throughput samples skip the weeks before anything ever finished', insights.throughputSamples(weeks).join() === '2')
+
+  // Monte Carlo, with a generator that always draws the same week.
+  const fixed = () => 0
+  check('a forecast replays the remaining work against past weeks',
+    JSON.stringify(insights.monteCarlo(6, [4], 3, fixed)) === '[11,11,11]')
+  check('…finishing part-way through a week', insights.monteCarlo(2, [4], 1, fixed)![0] === 4)
+  check('…and needs some finished work to draw on', insights.monteCarlo(3, [0, 0], 10, fixed) === null)
+  const seeded = insights.mulberry32(insights.seedOf('rl-1'))
+  const again = insights.mulberry32(insights.seedOf('rl-1'))
+  check('the generator is seeded: the same release forecasts the same', seeded() === again() && seeded() === again())
+
+  // Releases
+  const R = (id: string, release_date: string | null, extra: Partial<Release> = {}): Release => ({ id, project_id: 'p', name: id, description: '',
+    start_date: null, release_date, status: 'unreleased', released_at: null, created_at: at('2026-10-01'), ...extra })
+  check('the next release is the soonest unreleased, undated last',
+    insights.nextRelease([R('late', '2026-12-01'), R('undated', null), R('soon', '2026-11-01'), R('shipped', '2026-10-01', { status: 'released' })])?.id === 'soon')
+  check('…or an undated one when nothing has a date', insights.nextRelease([R('undated', null)])?.id === 'undated')
+  check('…or none', insights.nextRelease([R('shipped', null, { status: 'released' })]) === null)
+
+  const rel = R('r', '2026-10-31', { start_date: '2026-10-01' })
+  const open4 = ['a', 'b', 'c', 'd'].map((id) => issue(id, { release_id: 'r', story_points: 1 }))
+  const doneOne = issue('z', { release_id: 'r', status_id: 'done', story_points: 2, assignee_id: 'p1' })
+  const h = insights.releaseHealth(rel, [...open4, doneOne], statuses, [4, 4, 4], '2026-10-21', fixed)
+  check('a release counts its work and points', h.total === 5 && h.done === 1 && h.points.total === 6 && h.points.done === 2 && h.unassigned === 4)
+  check('…forecasts from recent throughput', h.forecast?.p50 === 7 && h.forecast.chance === 1, JSON.stringify(h.forecast))
+  check('…and is on track when it will likely make its date', h.verdict.label === 'On track' && h.verdict.tone === 'good')
+  const slow = insights.releaseHealth(rel, open4, statuses, [1, 1, 1], '2026-10-21', fixed)
+  check('…off track when it likely won\'t', slow.verdict.label === 'Off track', JSON.stringify(slow.forecast))
+  const coin = insights.releaseHealth(rel, open4, statuses, [4, 4, 1, 1], '2026-10-21', insights.mulberry32(7))
+  check('…at risk in between', coin.verdict.label === 'At risk', JSON.stringify(coin.forecast))
+  const young = insights.releaseHealth(rel, open4, statuses, [4, 4], '2026-10-21', fixed)
+  check('without three weeks of history, no forecast: time gone against work done', young.forecast === null && young.verdict.label === 'At risk')
+  check('…a release past its date is overdue', insights.releaseHealth(rel, open4, statuses, [4, 4, 4], '2026-11-02', fixed).verdict.label === 'Overdue')
+  check('…one with nothing open is ready', insights.releaseHealth(rel, [doneOne], statuses, [], '2026-11-02').verdict.label === 'Ready')
+  check('…and one without a date says so', insights.releaseHealth(R('u', null), open4, statuses, [4, 4, 4], '2026-10-21', fixed).verdict.label === 'No date')
+
+  // Sprints
+  const pts = (remaining: (number | null)[], start = 10) =>
+    remaining.map((r, i) => ({ day: `d${i}`, ideal: start - (start * i) / (remaining.length - 1), remaining: r }))
+  const active = sprint
+  check('a sprint burning at pace is on track', insights.sprintHealth(active, pts([10, 8, 6, null, null, null]), 'points').verdict.label === 'On track')
+  check('…one that will leave a little is at risk', insights.sprintHealth(active, pts([10, 8, 6, 3, null]), 'points').verdict.label === 'At risk',
+    JSON.stringify(insights.sprintHealth(active, pts([10, 8, 6, 3, null]), 'points')))
+  const spilling = insights.sprintHealth(active, pts([10, 10, 9, null, null, null]), 'points')
+  check('…one that will leave more says how much will spill', spilling.verdict.label === 'Will spill ~8 points' && spilling.verdict.tone === 'bad',
+    spilling.verdict.label)
+  check('…on day one it is too early', insights.sprintHealth(active, pts([10, null, null]), 'points').verdict.label === 'Too early')
+  check('…a closed sprint says what spilled',
+    insights.sprintHealth({ ...active, state: 'closed' }, pts([3, 2, 1], 3), 'issues').verdict.label === 'Spilled 1 issue')
+  const scope = insights.scopeChange(active, insights.groupEvents([
+    ev('x', 'sprint', at('2026-10-06'), null, 's'), ev('y', 'sprint', at('2026-10-04'), null, 's'), ev('z', 'sprint', at('2026-10-07'), 's', null),
+  ]))
+  check('scope added and removed after a sprint started', scope.added.join() === 'x' && scope.removed.join() === 'z')
+
+  // Time in status: clipped to the window at both ends.
+  const t = issue('t', { status_id: 'done', created_at: at('2026-10-01') })
+  const tEvents = insights.groupEvents([
+    ev('t', 'status', at('2026-10-02'), 'todo', 'doing'),
+    ev('t', 'status', at('2026-10-08'), 'doing', 'done'),
+  ])
+  const win = (d: string) => new Date(at(d)).getTime()
+  const tis = insights.timeInStatus([t], tEvents, statuses, win('2026-10-04'), win('2026-10-06'))
+  check('time in status counts only the window', tis.find((r) => r.status.id === 'doing')?.total === 2 &&
+    tis.find((r) => r.status.id === 'todo')?.passed === 0, JSON.stringify(tis.map((r) => [r.status.id, r.total, r.passed, r.now])))
+  check('…and where it stood at the window\'s end', tis.find((r) => r.status.id === 'doing')?.now === 1)
+  const whole = insights.timeInStatus([t], tEvents, statuses, win('2026-09-01'), win('2026-10-09'))
+  check('…from its creation when that is later', whole.find((r) => r.status.id === 'todo')?.total === 1 &&
+    whole.find((r) => r.status.id === 'doing')?.total === 6 && whole.find((r) => r.status.id === 'done')?.now === 1)
+  check('the bottleneck is the slowest in-progress status', insights.bottleneck(whole)?.status.id === 'doing')
+
+  // On time
+  const sprintsById = new Map([['s', { end_date: '2026-10-09' }]])
+  check('on time by the due date', insights.onTime({ resolved_at: at('2026-10-05'), due_date: '2026-10-05', sprint_id: null }, [], sprintsById) === true &&
+    insights.onTime({ resolved_at: at('2026-10-06'), due_date: '2026-10-05', sprint_id: null }, [], sprintsById) === false)
+  check('…else within its sprint', insights.onTime({ resolved_at: at('2026-10-09'), due_date: null, sprint_id: 's' }, [], sprintsById) === true &&
+    insights.onTime({ resolved_at: at('2026-10-10'), due_date: null, sprint_id: 's' }, [], sprintsById) === false)
+  check('…late if it ever spilled', insights.onTime({ resolved_at: at('2026-10-09'), due_date: null, sprint_id: 's' }, [{ completed: false }], sprintsById) === false)
+  check('…not judged without either, or while open', insights.onTime({ resolved_at: at('2026-10-09'), due_date: null, sprint_id: null }, [], sprintsById) === null &&
+    insights.onTime({ resolved_at: null, due_date: '2026-10-01', sprint_id: null }, [], sprintsById) === null)
+
+  const finished = [
+    issue('p1a', { assignee_id: 'p1', resolved_at: at('2026-10-05'), due_date: '2026-10-05', story_points: 3 }),
+    issue('p1b', { assignee_id: 'p1', resolved_at: at('2026-10-07'), due_date: '2026-10-05', story_points: 2 }),
+    issue('p2a', { assignee_id: 'p2', resolved_at: at('2026-10-05'), story_points: 8 }),
+    issue('nobody', { resolved_at: at('2026-10-05'), story_points: 13 }),
+  ]
+  const people = insights.personStats(finished, [], [], new Map(), statuses)
+  check('people: finished work per assignee, most points first, unassigned left out',
+    people.map((p) => `${p.assignee}:${p.issues}:${p.points}`).join() === 'p2:1:8,p1:2:5', JSON.stringify(people))
+  check('…with the on-time rate of what could be judged', people[1].rate === 0.5 && people[1].judged === 2 && people[0].rate === null)
+  const board = insights.leaderboard(people)
+  check('the leaderboard ranks by points', board.unit === 'points' && board.rows[0].assignee === 'p2')
+  const byCount = insights.leaderboard(insights.personStats(finished.map((i) => ({ ...i, story_points: null })), [], [], new Map(), statuses))
+  check('…by issues when nothing is estimated', byCount.unit === 'issues' && byCount.rows[0].assignee === 'p1')
+
+  // Epics
+  const epic = issue('E', { type_id: 'ep', start_date: '2026-10-01', due_date: '2026-10-31' })
+  const kids = [issue('k1', { parent_id: 'E', status_id: 'done' }), issue('k2', { parent_id: 'E', status_id: 'doing' }), issue('k3', { parent_id: 'E' }),
+    issue('k4', { parent_id: 'E' })]
+  const [row] = timelineRows([epic, ...kids], types, statuses)
+  check('an epic under way is in progress', insights.epicInProgress(row, statuses, '2026-10-21'))
+  check('…on track while its work keeps up with its time', insights.epicHealth(row, statuses, '2026-10-08').verdict.label === 'On track')
+  check('…at risk when its time runs ahead of its work', insights.epicHealth(row, statuses, '2026-10-21').verdict.label === 'At risk')
+  check('…overdue past its end', insights.epicHealth(row, statuses, '2026-11-02').verdict.label === 'Overdue')
+  const [idle] = timelineRows([issue('I', { type_id: 'ep' }), issue('i1', { parent_id: 'I' })], types, statuses)
+  check('an epic with nothing started and no dates isn\'t in progress', !insights.epicInProgress(idle, statuses, '2026-10-21'))
+
+  // Needs attention
+  const now = new Date(at('2026-10-21')).getTime()
+  const list = insights.needsAttention({
+    open: [
+      issue('blocked', { number: 1 }),
+      issue('late', { number: 2, due_date: '2026-10-19' }),
+      issue('stuck', { number: 3, status_id: 'doing', created_at: at('2026-10-01') }),
+      issue('fresh', { number: 4, status_id: 'doing', created_at: at('2026-10-20') }),
+      issue('focus', { number: 5 }),
+      issue('fine', { number: 6, assignee_id: 'p1', story_points: 1 }),
+    ],
+    byIssue: new Map(),
+    statuses,
+    blockers: new Map([['blocked', ['X-9']]]),
+    focus: new Set(['focus', 'fine']),
+    usesPoints: true,
+    agingDays: 5,
+    today: '2026-10-21',
+    now,
+  })
+  check('needs attention: blocked and overdue first, then stuck, then unowned sprint work',
+    list.map((a) => a.issue.id).join() === 'blocked,late,stuck,focus', list.map((a) => a.issue.id).join())
+  check('…each saying why', list[0].reasons[0].text === 'Blocked by X-9' && list[1].reasons[0].text === '2 days overdue' &&
+    list[3].reasons.map((r) => r.kind).join() === 'unassigned,unestimated', JSON.stringify(list.map((a) => a.reasons)))
+}
+
+// ---------------- widgets and project features ----------------
+{
+  type P = Parameters<typeof widgetsLib.widgetsFor>[0]
+  const scrum: P = { kind: 'scrum', disabled_features: [], summary_widgets: null }
+  check('a project shows its kind\'s default widgets', widgetsLib.widgetsFor(scrum).join() === widgetsLib.defaultWidgets('scrum').join())
+  check('…Kanban has no sprint widgets', !widgetsLib.widgetsFor({ ...scrum, kind: 'kanban' }).includes('sprint'))
+  check('the admins\' choice, minus unknown and other-kind keys',
+    widgetsLib.widgetsFor({ ...scrum, kind: 'kanban', summary_widgets: ['velocity', 'gone', 'flow', 'flow', 'people'] }).join() === 'flow,people')
+  check('…and minus widgets whose feature is off',
+    !widgetsLib.widgetsFor({ ...scrum, disabled_features: ['releases'] }).includes('release') &&
+    !widgetsLib.availableWidgets({ ...scrum, disabled_features: ['releases'] }).some((w) => w.key === 'release'))
+  check('toggling adds at the end or removes', widgetsLib.toggleWidget(['flow'], 'people', true).join() === 'flow,people' &&
+    widgetsLib.toggleWidget(['flow', 'people'], 'flow', false).join() === 'people')
+  check('moving swaps neighbours and stops at the ends', widgetsLib.moveWidget(['a', 'b', 'c'] as never[], 'c' as never, -1).join() === 'a,c,b' &&
+    widgetsLib.moveWidget(['a', 'b'] as never[], 'a' as never, -1).join() === 'a,b')
+  check('the default saves as null, to follow later defaults', widgetsLib.layoutToSave(scrum, widgetsLib.defaultWidgets('scrum')) === null)
+  check('a widget hidden only by a feature being off is kept when saving',
+    JSON.stringify(widgetsLib.layoutToSave({ ...scrum, disabled_features: ['releases'], summary_widgets: ['release', 'flow'] }, ['people'])) ===
+    '["people","release"]')
+
+  const proj = { disabled_features: [] as import('../src/lib/types').ProjectFeature[] }
+  check('every feature starts on', features.featureOn(proj, 'releases') && features.featureOn(proj, 'board'))
+  check('Board can go while Issues stays', features.canDisable(proj, 'board'))
+  check('…but not the last of the two', !features.canDisable({ disabled_features: ['issues'] }, 'board'))
+  check('turning off keeps a stable order', features.withFeature({ disabled_features: ['docs'] }, 'board', false).join() === 'board,docs' &&
+    features.withFeature({ disabled_features: ['docs', 'board'] }, 'docs', true).join() === 'board')
+  check('a tab\'s path names its feature', features.tabFeature('/releases/abc') === 'releases' && features.tabFeature('/settings') === null &&
+    features.tabFeature('') === null)
+  check('a link to a turned-off tab lands on the summary',
+    features.projectTabHref({ key: 'WEB', disabled_features: ['calendar'] }, 'calendar') === '/projects/WEB' &&
+    features.projectTabHref({ key: 'WEB', disabled_features: [] }, 'calendar') === '/projects/WEB/calendar')
+}
 
 done()

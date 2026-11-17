@@ -19,12 +19,11 @@ import Board from './pages/project/Board'
 import ProjectIssues from './pages/project/ProjectIssues'
 import Releases from './pages/project/Releases'
 import ReleaseDetail from './pages/project/ReleaseDetail'
-import Reports from './pages/project/Reports'
 import Timeline from './pages/project/Timeline'
 import ProjectCalendar from './pages/project/ProjectCalendar'
 import ProjectDocs from './pages/project/Docs'
-import ProjectNotes from './pages/project/Notes'
 import ProjectSettings from './pages/project/Settings'
+import ProjectNotesRedirect from './pages/project/NotesRedirect'
 import AdminLayout from './pages/admin/AdminLayout'
 import People from './pages/admin/People'
 import IssueTypes from './pages/admin/IssueTypes'
@@ -60,9 +59,11 @@ export default function App() {
             <Route path="releases/:releaseId" element={<ReleaseDetail />} />
             <Route path="timeline" element={<Timeline />} />
             <Route path="calendar" element={<ProjectCalendar />} />
-            <Route path="reports" element={<Reports />} />
+            {/* Reports are Summary widgets now; old links land there. */}
+            <Route path="reports" element={<Navigate to=".." relative="path" replace />} />
             <Route path="docs" element={<ProjectDocs />} />
-            <Route path="notes" element={<ProjectNotes />} />
+            {/* Your notes on a project live in Notes, filtered to it. */}
+            <Route path="notes" element={<ProjectNotesRedirect />} />
             <Route path="settings" element={<ProjectSettings />} />
           </Route>
           {isAdmin && (

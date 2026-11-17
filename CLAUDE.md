@@ -14,7 +14,9 @@ behaviour).
   Sibling of `el-support` and `el-people`; same stack and conventions.
 - Modules: **projects** (Scrum / Kanban), **issues** (types by level, custom
   fields, links, watchers, history), **board**, **backlog** and **sprints**,
-  **timeline** (epics), **releases** (with notes), **summary**, **reports**, **docs** (Google Drive),
+  **timeline** (epics), **releases** (with notes), **summary** (project intelligence: widgets a
+  project's admins choose, incl. the classic reports; no Reports tab), **docs** (Google Drive),
+  **project features** (admins turn off Timeline, Calendar, Issues, Board, Releases, Docs),
   **issue lists and saved filters** (pinned to the navigation per person), **calendar** (meetings only from each
   person's own Google Calendar, read-only; beside them epics, issues,
   releases and todos; no app-made events; release dates pushed to the
@@ -60,6 +62,10 @@ behaviour).
   changed > commented; the save's new status in `detail`), as in Support.
   Don't add per-person inserts.
   Client checks are a convenience.
+- **A project feature turned off only hides it.** `disabled_features` hides
+  a tab and its UI (Releases off: the issue's Release field, release widgets,
+  release dates on calendars); no data changes and nobody's access does. Check
+  `featureOn` where a feature shows; never delete or null data for it.
 - **Some state changes only through RPCs.** Projects are created only by
   `project_create`; a sprint's state only by `sprint_start` / `sprint_complete`
   (which also write `sprint_issues`); status / field order only by
@@ -140,14 +146,15 @@ behaviour).
 | `src/pages/` | One file per route. Fetches its own data, owns page state. |
 | `src/pages/` (top) | `Work` (project cards, My issues / Recent activity, `?tab=`), Issues, Calendar, BrowseIssue, Login. |
 | `src/pages/home/` | Dashboard (Home: wide panels, or `PhoneHome` below `md`), Todos, Notes. |
-| `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Reports, Docs, Notes (yours), Settings. |
+| `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Docs, Settings (incl. Features); a tab whose feature is off is hidden. `NotesRedirect` (old `/notes` links). |
 | `src/pages/admin/` | `AdminLayout` (tabs) over People, issue types, workspace settings (workspace admins). |
 | `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/home/` | Home's parts: `useAgenda` (meetings, releases, issues and todos due, overdue, noted meetings, ticking), `AgendaRow`, `NowPanel` / `NowCard` (the meeting now, wide / phone), `PhoneHome` (date line, meeting card with its note in a sheet, seven-day strip `?date=`, the day's agenda). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
-| `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
+| `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
+| `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to pinned ones or not: the notes page, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
 | `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
@@ -167,8 +174,9 @@ behaviour).
   `/browse/:key` — everyone. `/projects` redirects to `/work`.
 - `/projects/:key` → Summary; `/backlog` (Scrum only; Kanban redirects to
   board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`, `/releases`, `/releases/:releaseId`,
-  `/reports` (`?report=&sprint=`), `/docs`, `/notes` (your own), `/settings` (`?tab=`; project admins,
-  others redirected). A project RLS hides reads as "no project you can see".
+  `/docs`, `/settings` (`?tab=`; project admins,
+  others redirected). A tab whose feature is off redirects to Summary (`lib/projectFeatures`).
+  `/reports` redirects to Summary, `/notes` to `/notes?project=<id>`. A project RLS hides reads as "no project you can see".
 - `/admin` (→ `/admin/people`), `/admin/issue-types`, `/admin/workspace` — workspace admins,
   under `AdminLayout`; gated by not registering the routes in `src/App.tsx`;
   reached from the header's Admin button (admins only).
@@ -220,7 +228,17 @@ behaviour).
   `matchesFilter` (loaded rows), CSV.
 - `fields.ts` — which custom fields apply to a type, required checks.
 - `reports.ts` — history replay (`stateAt`), burndown, velocity, sprint report,
-  created vs resolved, cumulative flow, breakdowns, workload, recent counts.
+  created vs resolved, cumulative flow.
+- `insights.ts` — the Summary's judgements and every threshold they use:
+  work items, cycle time, throughput, Monte Carlo release forecast (seeded),
+  release / sprint / epic verdicts, time in status, on time, people and
+  leaderboard, needs attention.
+- `widgets.ts` — the Summary's widgets (kinds, features needed, width), the
+  defaults per kind, a project's layout and saving it.
+- `projectFeatures.ts` — the features a project can turn off, `featureOn`,
+  `canDisable` (one of Issues / Board stays), tab paths and links.
+- `paging.ts` — `fetchAll` / `fetchByIds`: every row past PostgREST's
+  1000-row cap, ids chunked for `in` filters.
 - `releases.ts` — progress, days left (`releaseCountdown`, on the issue's
   Release field) and release notes (text and HTML).
 - `drafts.ts` — unsaved text kept in the browser per person (an issue's
@@ -262,7 +280,10 @@ Full detail in `supabase/schema.sql`.
   email. Everyone signed in reads all; admins write; you may rename yourself;
   `issue_view` (dialog or side panel) only its owner sets (`profiles_guard`).
 - `projects` (+ `project_members` with `project_role`) — key immutable,
-  `issue_counter`, kind, visibility, lead, colour, Drive folder, archived.
+  `issue_counter`, kind, visibility, lead, colour, Drive folder, archived;
+  `disabled_features` (checked: known names, not both Issues and Board) and
+  `summary_widgets` (keys' shape only; null = the kind's default), both
+  project admins'. Off only hides: data and access are unchanged.
 - `project_statuses` — a project's workflow (position, category, WIP limit).
 - `issue_types` — workspace-wide; `level` epic / standard / subtask.
 - `fields` — a project's custom fields; values in `issues.custom` keyed by id.

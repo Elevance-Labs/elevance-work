@@ -40,6 +40,7 @@ import {
   type TodoRow, type TodoView,
 } from '../lib/todos'
 import type { Profile, Todo, TodoList as TodoListRow } from '../lib/types'
+import { projectTabHref } from '../lib/projectFeatures'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { PersonAvatar } from './common'
 import { ProjectAvatar } from './IssueBits'
@@ -166,7 +167,7 @@ function TodoItem({ todo, showContext, lists, showList, onChange, onDelete, onLe
     ),
     showContext && project && (
       <Tooltip key="project" title={project.name}>
-        <Box component={Link} to={`/projects/${project.key}/calendar`}
+        <Box component={Link} to={projectTabHref(project, 'calendar')}
           sx={{ color: 'text.secondary', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5, '&:hover': { textDecoration: 'underline' } }}>
           <ProjectAvatar project={project} size={14} />{project.key}
         </Box>

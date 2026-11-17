@@ -1,4 +1,5 @@
-// Every aggregation the Summary and Reports pages draw. Pure functions over
+// The classic agile charts the Summary's widgets draw (burndown, velocity,
+// sprint report, created vs resolved, cumulative flow). Pure functions over
 // rows already loaded: issues, their history (issue_events) and the sprint
 // snapshots (sprint_issues).
 import { addDays, daysBetween, isoDate } from './constants'
@@ -179,62 +180,6 @@ export function cumulativeFlow(issues: Issue[], events: IssueEvent[], statuses: 
     }
     return point
   })
-}
-
-export interface Slice {
-  key: string
-  count: number
-}
-
-/** Counts by a key, largest first; ties keep `order` (e.g. the workflow's) if given. */
-export function breakdown<T>(rows: T[], keyOf: (row: T) => string | null, order: string[] = []): Slice[] {
-  const counts = new Map<string, number>()
-  for (const row of rows) {
-    const k = keyOf(row) ?? ''
-    counts.set(k, (counts.get(k) ?? 0) + 1)
-  }
-  const rankOf = (k: string) => (order.includes(k) ? order.indexOf(k) : order.length)
-  return [...counts].map(([key, count]) => ({ key, count }))
-    .sort((a, b) => (order.length ? rankOf(a.key) - rankOf(b.key) : b.count - a.count))
-}
-
-export interface WorkloadRow {
-  assignee: string | null
-  issues: number
-  points: number
-}
-
-/** Unresolved work per assignee (null: unassigned), busiest first. */
-export function workload(issues: Issue[]): WorkloadRow[] {
-  const rows = new Map<string | null, WorkloadRow>()
-  for (const i of issues) {
-    if (i.resolved_at) continue
-    const row = rows.get(i.assignee_id) ?? { assignee: i.assignee_id, issues: 0, points: 0 }
-    row.issues++
-    row.points += i.story_points ?? 0
-    rows.set(i.assignee_id, row)
-  }
-  return [...rows.values()].sort((a, b) => b.issues - a.issues)
-}
-
-export interface RecentCounts {
-  created: number
-  updated: number
-  resolved: number
-  dueSoon: number
-}
-
-/** The Summary page's tiles: the last seven days, and what is due in the next seven. */
-export function recentCounts(issues: Issue[], today: string): RecentCounts {
-  const weekAgo = `${addDays(today, -7)}T00:00:00`
-  const since = (t: string | null) => !!t && new Date(t).getTime() >= new Date(weekAgo).getTime()
-  return {
-    created: issues.filter((i) => since(i.created_at)).length,
-    updated: issues.filter((i) => since(i.updated_at)).length,
-    resolved: issues.filter((i) => since(i.resolved_at)).length,
-    dueSoon: issues.filter((i) => !i.resolved_at && i.due_date && i.due_date >= today && i.due_date <= addDays(today, 7))
-      .length,
-  }
 }
 
 /** How far through its dates a sprint or release is, 0–1. */

@@ -2,6 +2,7 @@
 // and what goes on them. Meetings come from your own Google Calendar (the app
 // keeps none of its own); alongside them, the app's own dates: epics and
 // issues (start to due), releases and your todos.
+import { featureOn } from './projectFeatures'
 import { addDays, formatDateRange, formatDayTime, formatTime, isoDate } from './constants'
 import type { GoogleCalendarEvent, Issue, Project, Release, Todo } from './types'
 
@@ -145,7 +146,8 @@ export function calendarItems(src: CalendarSources, from: string, to: string): C
   }
   for (const r of src.releases ?? []) {
     const p = project.get(r.project_id)
-    if (!p || !r.release_date || r.status === 'archived' || r.release_date < from || r.release_date > to) continue
+    // A project with Releases turned off shows none, anywhere.
+    if (!p || !featureOn(p, 'releases') || !r.release_date || r.status === 'archived' || r.release_date < from || r.release_date > to) continue
     items.push({
       ...base,
       id: `release:${r.id}`,

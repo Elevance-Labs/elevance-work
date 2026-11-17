@@ -1,5 +1,6 @@
-// A project's settings, for its admins: details, people, workflow, custom
-// fields, its Google Chat space, and archiving or deleting it.
+// A project's settings, for its admins: details, the features it uses,
+// people, workflow, custom fields, its Google Chat space, and archiving or
+// deleting it.
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -16,6 +17,7 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Switch,
   Tab,
   Table,
   TableBody,
@@ -48,6 +50,7 @@ import type {
   Field,
   FieldKind,
   ProjectIntegrations,
+  ProjectFeature,
   ProjectKind,
   ProjectRole,
   ProjectStatus,
@@ -58,9 +61,10 @@ import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { invalidateProjectMeta, useProjectMeta } from '../../workspace/useProjectMeta'
 import { ConfirmDialog, FormDialog, Loading, PersonName } from '../../components/common'
 import { PersonPicker } from '../../components/pickers'
+import { FEATURES, canDisable, featureOn, withFeature } from '../../lib/projectFeatures'
 import { useProject } from './projectContext'
 
-type TabKey = 'details' | 'people' | 'workflow' | 'fields' | 'chat' | 'danger'
+type TabKey = 'details' | 'features' | 'people' | 'workflow' | 'fields' | 'chat' | 'danger'
 
 const FIELD_KIND_LABELS: Record<FieldKind, string> = {
   text: 'Text',
@@ -135,6 +139,54 @@ function Details() {
       {s.error && <Alert severity="error">{s.error}</Alert>}
       {s.saved && <Alert severity="success">Saved.</Alert>}
       <Box><Button variant="contained" onClick={save} loading={s.busy}>Save</Button></Box>
+    </Stack>
+  )
+}
+
+// Each switch saves at once. Off only hides a part: its data stays.
+function Features() {
+  const { project } = useProject()
+  const { reload } = useWorkspace()
+  const [saving, setSaving] = useState<ProjectFeature | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function toggle(feature: ProjectFeature, on: boolean) {
+    setSaving(feature)
+    setError(null)
+    const { error: e } = await supabase.from('projects').update({ disabled_features: withFeature(project, feature, on) }).eq('id', project.id)
+    if (e) setError(errorMessage(e))
+    else await reload()
+    setSaving(null)
+  }
+
+  return (
+    <Stack spacing={2} sx={{ maxWidth: 560 }}>
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        Turn off what this project doesn't use: its tab goes for everyone. Nothing is deleted; turning it back on brings it all back.
+      </Typography>
+      <Paper variant="outlined">
+        {FEATURES.map((f, i) => {
+          const on = featureOn(project, f.key)
+          const locked = on && !canDisable(project, f.key)
+          const control = (
+            <Switch checked={on} disabled={locked || saving !== null} onChange={(e) => toggle(f.key, e.target.checked)}
+              slotProps={{ input: { 'aria-label': f.label } }} />
+          )
+          return (
+            <Stack key={f.key} direction="row" spacing={2} sx={{ alignItems: 'center', px: 2, py: 1.25, borderTop: i ? 1 : 0, borderColor: 'divider' }}>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{f.label}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>{f.help}</Typography>
+              </Box>
+              {locked
+                ? <Tooltip title="Keep Issues or Board: one of them shows the project's issues."><span>{control}</span></Tooltip>
+                : control}
+            </Stack>
+          )
+        })}
+      </Paper>
+      {saving && <Typography variant="caption" sx={{ color: 'text.secondary' }}>Saving…</Typography>}
+      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
     </Stack>
   )
 }
@@ -487,7 +539,7 @@ export default function ProjectSettings() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as TabKey) || 'details'
   const tabs: [TabKey, string][] = [
-    ['details', 'Details'], ['people', 'People'], ['workflow', 'Workflow'], ['fields', 'Fields'], ['chat', 'Google Chat'], ['danger', 'Archive & delete'],
+    ['details', 'Details'], ['features', 'Features'], ['people', 'People'], ['workflow', 'Workflow'], ['fields', 'Fields'], ['chat', 'Google Chat'], ['danger', 'Archive & delete'],
   ]
   return (
     <Box>
@@ -495,6 +547,7 @@ export default function ProjectSettings() {
         {tabs.map(([k, label]) => <Tab key={k} value={k} label={label} />)}
       </Tabs>
       {tab === 'details' && <Details />}
+      {tab === 'features' && <Features />}
       {tab === 'people' && <People />}
       {tab === 'workflow' && <Workflow />}
       {tab === 'fields' && <Fields />}

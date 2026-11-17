@@ -5,6 +5,7 @@ export type AppRole = 'admin' | 'member'
 export type ProjectRole = 'admin' | 'member' | 'viewer'
 export type ProjectKind = 'scrum' | 'kanban'
 export type ProjectVisibility = 'private' | 'open'
+export type ProjectFeature = 'timeline' | 'calendar' | 'issues' | 'board' | 'releases' | 'docs'
 export type StatusCategory = 'todo' | 'in_progress' | 'done'
 export type IssueLevel = 'epic' | 'standard' | 'subtask'
 export type IssuePriority = 'highest' | 'high' | 'medium' | 'low' | 'lowest'
@@ -54,6 +55,10 @@ export interface Project {
   drive_folder_id: string | null
   archived_at: string | null
   created_at: string
+  /** What its admins have turned off (lib/projectFeatures); one of Issues and Board stays on. */
+  disabled_features: ProjectFeature[]
+  /** The Summary's widgets in order (components/insights/registry); null is the kind's default. */
+  summary_widgets: string[] | null
 }
 
 export interface ProjectMember {

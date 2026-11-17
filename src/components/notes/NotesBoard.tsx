@@ -1,6 +1,6 @@
 // Your notes as sticky notes: the notes page (every note, with search and
-// filters), a project's notes tab, and the dashboard's pinned notes all use
-// this, scoped to what they show. Pinned notes come first. Notes are private (RLS), so the query
+// filters) and the dashboard's pinned notes both use this, scoped to what
+// they show. Pinned notes come first. Notes are private (RLS), so the query
 // is only ever for your own; the filters run on what is loaded. Archived
 // notes are their own view (the toolbar's Archived), where they are restored
 // or deleted; nowhere else shows them.
@@ -56,7 +56,6 @@ import NoteLabelsDialog from './NoteLabelsDialog'
 import { useItemChanges } from '../../workspace/itemEvents'
 
 export interface NotesScope {
-  projectId?: string
   // Only pinned notes (the dashboard); new ones are pinned.
   pinned?: boolean
 }
@@ -64,16 +63,14 @@ export interface NotesScope {
 function NoteCard({
   note,
   labels,
-  hide,
   onOpen,
 }: {
   note: NoteRow
   labels: Map<string, NoteLabel>
-  hide: { project?: boolean }
   onOpen: () => void
 }) {
   const { projectById } = useWorkspace()
-  const project = hide.project ? undefined : projectById(note.project_id)
+  const project = projectById(note.project_id)
   const heading = noteHeading(note)
   const body = note.title.trim() ? note.body.trim() : note.body.trim().split('\n').slice(1).join('\n').trim()
   const noteLabels = note.label_ids.map((id) => labels.get(id)).filter((l): l is NoteLabel => !!l)
@@ -132,17 +129,16 @@ export default function NotesBoard({
   const [open, setOpen] = useState<{ note: NoteRow | null } | null>(null)
   const [managing, setManaging] = useState(false)
   const phone = useMediaQuery(useTheme().breakpoints.down('sm'))
-  const { projectId, pinned } = scope
+  const { pinned } = scope
 
   const load = useCallback(async () => {
     let q = supabase.from('notes').select(NOTE_COLUMNS).eq('owner_id', me.id)
-    if (projectId) q = q.eq('project_id', projectId)
     if (pinned) q = q.eq('pinned', true)
     const [n, l] = await Promise.all([q, supabase.from('note_labels').select('*').eq('owner_id', me.id).order('name')])
     if (n.error) setError(errorMessage(n.error))
     setNotes(((n.data ?? []) as unknown as NoteRow[]).sort(byPinnedThenRecent))
     setLabels((l.data ?? []) as NoteLabel[])
-  }, [me.id, projectId, pinned])
+  }, [me.id, pinned])
 
   useEffect(() => {
     load()
@@ -169,12 +165,11 @@ export default function NotesBoard({
   const archive = filter.archived
   const inView = notes.filter((n) => !!n.archived_at === archive)
   const shown = inView.filter((n) => matchesNote(n, filter, { labels: labelMap, projectName }))
-  const defaults: NoteDefaults = { project_id: projectId ?? null, pinned: !!pinned }
-  const hide = { project: !!projectId }
+  const defaults: NoteDefaults = { project_id: null, pinned: !!pinned }
 
   const saved = (note: NoteRow) => {
-    // A note moved off this project, or unpinned from the dashboard, leaves its list.
-    const inScope = (!projectId || note.project_id === projectId) && (!pinned || note.pinned)
+    // A note unpinned from the dashboard leaves its list.
+    const inScope = !pinned || note.pinned
     setNotes((ns) => [...(inScope ? [note] : []), ...(ns ?? []).filter((n) => n.id !== note.id)].sort(byPinnedThenRecent))
   }
   const deleted = (id: string) => {
@@ -253,13 +248,11 @@ export default function NotesBoard({
             </MenuItem>
           ))}
         </TextField>
-        {!projectId && (
-          <TextField select size="small" fullWidth value={filter.project} onChange={(e) => setFilter({ project: e.target.value })}
-            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Project' } }}>
-            <MenuItem value="">All projects</MenuItem>
-            {projects.filter((p) => !p.archived_at || p.id === filter.project).map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
-          </TextField>
-        )}
+        <TextField select size="small" fullWidth value={filter.project} onChange={(e) => setFilter({ project: e.target.value })}
+          slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Project' } }}>
+          <MenuItem value="">All projects</MenuItem>
+          {projects.filter((p) => !p.archived_at || p.id === filter.project).map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+        </TextField>
         {!isNoteFilterEmpty(filter) && (
           <Box><Button onClick={() => setFilter({ ...EMPTY_NOTE_FILTER, archived: archive })}>Clear</Button></Box>
         )}
@@ -278,7 +271,7 @@ export default function NotesBoard({
               {pinned ? 'Pin a note to keep it here. Only you see your notes.' : 'None yet. Only you will see the ones you add.'}
             </Typography>
           )}
-          <Box sx={{ mt: 1 }}>{shown.map((n) => <NoteCard key={n.id} note={n} labels={labelMap} hide={hide} onOpen={() => setOpen({ note: n })} />)}</Box>
+          <Box sx={{ mt: 1 }}>{shown.map((n) => <NoteCard key={n.id} note={n} labels={labelMap} onOpen={() => setOpen({ note: n })} />)}</Box>
           {newButton}
         </>
       ) : archive && inView.length === 0 ? (
@@ -287,13 +280,13 @@ export default function NotesBoard({
         </EmptyState>
       ) : inView.length === 0 ? (
         <EmptyState icon={<StickyNote2OutlinedIcon />} title="No notes yet">
-          {projectId ? 'Notes you link to this project show here.' : 'Jot something down.'} Only you can see your notes.
+          Jot something down. Only you can see your notes.
         </EmptyState>
       ) : shown.length === 0 ? (
         <EmptyState title="No notes match">Try other words or filters.</EmptyState>
       ) : (
         <Box sx={{ columnWidth: 240, columnGap: 2 }}>
-          {shown.map((n) => <NoteCard key={n.id} note={n} labels={labelMap} hide={hide} onOpen={() => setOpen({ note: n })} />)}
+          {shown.map((n) => <NoteCard key={n.id} note={n} labels={labelMap} onOpen={() => setOpen({ note: n })} />)}
         </Box>
       )}
       {open && (

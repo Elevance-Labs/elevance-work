@@ -50,6 +50,7 @@ import { assignable, can, roleIn } from '../../lib/permissions'
 import { errorMessage, formatDayTime, timeAgo } from '../../lib/constants'
 import { ISSUE_COLUMNS, ISSUE_DETAIL_COLUMNS, issuePath, parentLevelFor, type IssueWrite } from '../../lib/issues'
 import { isBlankHtml, sanitizeHtml } from '../../lib/richText'
+import { featureOn } from '../../lib/projectFeatures'
 import { releaseCountdown } from '../../lib/releases'
 import { clearDraft, draftKey, readDraft, writeDraft } from '../../lib/drafts'
 import type {
@@ -651,6 +652,8 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
   )
 
   // How long the issue's release has: whoever works on it sees the days left.
+  // With Releases off for the project the field is hidden; its value stays.
+  const releasesOn = featureOn(project, 'releases')
   const release = meta?.releases.find((r) => r.id === issue.release_id)
   const releaseDue = release ? releaseCountdown(release) : null
 
@@ -688,8 +691,8 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
         <PersonPicker label="Reporter" value={issue.reporter_id} options={profiles.filter((p) => p.active)} disabled={!editable}
           allowNone={false} onChange={(id) => id && save({ reporter_id: id })} />
       </Grid>
-      {sprintField && <Grid size={6}>{sprintField}</Grid>}
-      {meta && (
+      {sprintField && <Grid size={releasesOn ? 6 : 12}>{sprintField}</Grid>}
+      {meta && releasesOn && (
         <Grid size={sprintField ? 6 : 12}>
           <TextField select label="Release" value={issue.release_id ?? ''} disabled={!editable} fullWidth
             helperText={releaseDue?.text} data-release-due={releaseDue?.tone}
@@ -792,7 +795,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
       onChange={(comments) => setData((d) => d && { ...d, comments })}
       onAttachmentsChange={(update) => setData((d) => d && { ...d, attachments: update(d.attachments) })} />
   ) : (
-    <History events={data.events} />
+    <History events={releasesOn ? data.events : data.events.filter((e) => e.field !== 'release')} />
   )
 
   const activity = (

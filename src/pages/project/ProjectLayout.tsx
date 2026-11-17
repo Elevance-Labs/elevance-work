@@ -8,6 +8,8 @@ import AddToDriveIcon from '@mui/icons-material/AddToDrive'
 import { PROJECT_KIND_LABELS, PROJECT_ROLE_LABELS } from '../../lib/constants'
 import { can } from '../../lib/permissions'
 import { projectFolderUrl } from '../../lib/drive'
+import { featureOn, projectTabHref, tabFeature } from '../../lib/projectFeatures'
+import type { ProjectFeature } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { EmptyState } from '../../components/common'
 import { ProjectAvatar } from '../../components/IssueBits'
@@ -30,23 +32,25 @@ export default function ProjectLayout() {
   }
   const role = roleOf(project.id)
   const base = `/projects/${project.key}`
+  const on = (f: ProjectFeature) => featureOn(project, f)
   const tabs = [
     { to: base, label: 'Summary' },
     ...(project.kind === 'scrum' ? [{ to: `${base}/backlog`, label: 'Backlog' }] : []),
-    { to: `${base}/board`, label: 'Board' },
-    { to: `${base}/timeline`, label: 'Timeline' },
-    { to: `${base}/calendar`, label: 'Calendar' },
-    { to: `${base}/issues`, label: 'Issues' },
-    { to: `${base}/releases`, label: 'Releases' },
-    { to: `${base}/reports`, label: 'Reports' },
-    { to: `${base}/docs`, label: 'Docs' },
-    { to: `${base}/notes`, label: 'My notes' },
+    ...(on('board') ? [{ to: `${base}/board`, label: 'Board' }] : []),
+    ...(on('timeline') ? [{ to: `${base}/timeline`, label: 'Timeline' }] : []),
+    ...(on('calendar') ? [{ to: `${base}/calendar`, label: 'Calendar' }] : []),
+    ...(on('issues') ? [{ to: `${base}/issues`, label: 'Issues' }] : []),
+    ...(on('releases') ? [{ to: `${base}/releases`, label: 'Releases' }] : []),
+    ...(on('docs') ? [{ to: `${base}/docs`, label: 'Docs' }] : []),
     ...(can.manageProject(role) ? [{ to: `${base}/settings`, label: 'Settings' }] : []),
   ]
   const current = [...tabs].sort((a, b) => b.to.length - a.to.length).find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))
 
+  // A tab its admins turned off isn't there: its address lands on the Summary.
+  const off = tabFeature(pathname.slice(base.length))
+  if (off && !on(off)) return <Navigate to={base} replace />
   if (pathname === `${base}/settings` && !can.manageProject(role)) return <Navigate to={base} replace />
-  if (pathname === `${base}/backlog` && project.kind !== 'scrum') return <Navigate to={`${base}/board`} replace />
+  if (pathname === `${base}/backlog` && project.kind !== 'scrum') return <Navigate to={projectTabHref(project, 'board')} replace />
 
   async function openFolder() {
     setOpening(true)

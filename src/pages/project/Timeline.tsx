@@ -26,6 +26,7 @@ import { EmptyState, Loading } from '../../components/common'
 import { IssueKey, TypeIcon } from '../../components/IssueBits'
 import { useIssueHref } from '../../components/useIssueHref'
 import { ReleaseDialog } from '../../components/calendar/ItemDialogs'
+import { featureOn } from '../../lib/projectFeatures'
 import { useProject } from './projectContext'
 
 const LABEL_WIDTH = 300
@@ -74,7 +75,8 @@ export default function Timeline() {
   const today = todayIso()
   const px = ZOOMS[zoom]
   const rows = issues ? timelineRows(issues, issueTypes, statuses) : []
-  const releases = (meta?.releases ?? []).filter((r) => r.release_date && r.status !== 'archived')
+  // Releases turned off for the project aren't drawn.
+  const releases = featureOn(project, 'releases') ? (meta?.releases ?? []).filter((r) => r.release_date && r.status !== 'archived') : []
   const sprints = (meta?.sprints ?? []).filter((s) => s.start_date && s.end_date)
   const window_ = timelineWindow(
     [

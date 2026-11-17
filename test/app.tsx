@@ -7,6 +7,7 @@ import { CssBaseline, ThemeProvider } from '@mui/material'
 import App from '../src/App'
 import { AuthProvider } from '../src/auth/AuthProvider'
 import { clearProjectMeta } from '../src/workspace/useProjectMeta'
+import { clearWidgetCache } from '../src/components/insights/useWidgetQuery'
 import { theme, themeSettings } from '../src/theme'
 import { settle } from './setup'
 
@@ -26,6 +27,7 @@ export async function mountApp(path = '/') {
   root?.unmount()
   // Project meta is cached per session; a new mount is a new session.
   clearProjectMeta()
+  clearWidgetCache()
   document.body.innerHTML = '<div id="root"></div>'
   root = createRoot(document.getElementById('root')!)
   root.render(

@@ -10,6 +10,7 @@ import type { Issue, Release, Todo } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import CalendarView, { type Layer } from '../../components/calendar/CalendarView'
 import { TODO_COLUMNS } from '../../lib/todos'
+import { featureOn } from '../../lib/projectFeatures'
 import { useProject } from './projectContext'
 
 const LAYERS: Layer[] = [
@@ -25,6 +26,9 @@ export default function ProjectCalendar() {
   const { issueTypes } = useWorkspace()
   const epicTypeIds = issueTypes.filter((t) => t.level === 'epic').map((t) => t.id).join(',')
 
+  const releasesOn = featureOn(project, 'releases')
+  const layers = releasesOn ? LAYERS : LAYERS.filter((l) => l.key !== 'release')
+
   const load = useCallback(async (from: string, to: string, shown: ItemKind[]) => {
     const none = Promise.resolve({ data: [] })
     const wantIssues = shown.includes('issue')
@@ -34,7 +38,7 @@ export default function ProjectCalendar() {
     if (!wantIssues) issues = issues.in('type_id', epicTypeIds.split(','))
     const [i, r, t] = await Promise.all([
       wantIssues || wantEpics ? issues : none,
-      shown.includes('release')
+      shown.includes('release') && releasesOn
         ? supabase.from('releases').select('*').eq('project_id', project.id).gte('release_date', from).lte('release_date', to)
         : none,
       shown.includes('todo')
@@ -46,14 +50,14 @@ export default function ProjectCalendar() {
       releases: (r.data ?? []) as Release[],
       todos: (t.data ?? []) as unknown as Todo[],
     }
-  }, [project.id, epicTypeIds])
+  }, [project.id, epicTypeIds, releasesOn])
 
   return (
     <>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-        {project.name}'s releases and epics, and your todos on it. Turn on Issues to see every issue with a start or due date.
+        {project.name}'s {releasesOn ? 'releases and epics' : 'epics'}, and your todos on it. Turn on Issues to see every issue with a start or due date.
       </Typography>
-      <CalendarView layers={LAYERS} load={load} storageKey={`el-work:project-calendar-layers:${project.key}`} />
+      <CalendarView layers={layers} load={load} storageKey={`el-work:project-calendar-layers:${project.key}`} />
     </>
   )
 }

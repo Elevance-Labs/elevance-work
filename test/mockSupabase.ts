@@ -65,9 +65,11 @@ export const PEOPLE = {
 
 const PROJECTS: Row[] = [
   { id: 'pr-web', key: 'WEB', name: 'Website', description: 'The marketing site', kind: 'scrum', visibility: 'private',
-    lead_id: 'p-sara', color: '#3f51b5', issue_counter: 6, drive_folder_id: null, archived_at: null, created_at: at('2026-09-01') },
+    lead_id: 'p-sara', color: '#3f51b5', issue_counter: 6, drive_folder_id: null, archived_at: null, created_at: at('2026-09-01'),
+    disabled_features: [], summary_widgets: null },
   { id: 'pr-ops', key: 'OPS', name: 'Operations', description: '', kind: 'kanban', visibility: 'open',
-    lead_id: 'p-amna', color: '#00897b', issue_counter: 2, drive_folder_id: null, archived_at: null, created_at: at('2026-09-02') },
+    lead_id: 'p-amna', color: '#00897b', issue_counter: 2, drive_folder_id: null, archived_at: null, created_at: at('2026-09-02'),
+    disabled_features: [], summary_widgets: null },
 ]
 
 const MEMBERS: Row[] = [
@@ -690,7 +692,8 @@ const RPCS: Record<string, (args: Row) => unknown> = {
   project_create: ({ p_key, p_name, p_kind, p_visibility, p_description }) => {
     const id = `new-${nextId++}`
     const p = { id, key: p_key, name: p_name, kind: p_kind, visibility: p_visibility, description: p_description ?? '',
-      lead_id: me()?.id, color: '#3f51b5', issue_counter: 0, drive_folder_id: null, archived_at: null, created_at: new Date().toISOString() }
+      lead_id: me()?.id, color: '#3f51b5', issue_counter: 0, drive_folder_id: null, archived_at: null, created_at: new Date().toISOString(),
+      disabled_features: [], summary_widgets: null }
     rowsIn('projects').push(p)
     rowsIn('project_members').push({ project_id: id, profile_id: me()?.id, role: 'admin' })
     ;[['To Do', 'todo'], ['In Progress', 'in_progress'], ['In Review', 'in_progress'], ['Done', 'done']].forEach(([name, category], i) =>

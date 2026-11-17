@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/constants'
 import { ISSUE_COLUMNS, parentLevelFor } from '../lib/issues'
 import { sanitizeHtml, isBlankHtml } from '../lib/richText'
 import type { CustomValues, Issue, IssuePriority } from '../lib/types'
+import { featureOn } from '../lib/projectFeatures'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { openSprints, useProjectMeta } from '../workspace/useProjectMeta'
 import { emitIssueChange } from '../workspace/issueEvents'
@@ -70,6 +71,7 @@ export default function CreateIssueDialog({ defaults, onClose }: { defaults: Cre
   const parentLevel = parentLevelFor(level)
   const parentTypeIds = issueTypes.filter((t) => t.level === parentLevel).map((t) => t.id)
   const sprints = openSprints(meta)
+  const releasesOn = featureOn(project, 'releases')
 
   function switchProject(id: string) {
     setProjectId(id)
@@ -102,7 +104,7 @@ export default function CreateIssueDialog({ defaults, onClose }: { defaults: Cre
         story_points: points === '' ? null : Number(points),
         due_date: due || null,
         sprint_id: level === 'standard' && sprintId ? sprintId : null,
-        release_id: releaseId || null,
+        release_id: (releasesOn && releaseId) || null,
         parent_id: parent?.id ?? null,
         custom,
         ...(defaults.statusId ? { status_id: defaults.statusId } : {}),
@@ -193,12 +195,14 @@ export default function CreateIssueDialog({ defaults, onClose }: { defaults: Cre
           <TextField label="Due date" type="date" value={due} fullWidth onChange={(e) => setDue(e.target.value)}
             slotProps={{ inputLabel: { shrink: true } }} />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6 }}>
-          <TextField select label="Release" value={releaseId} fullWidth onChange={(e) => setReleaseId(e.target.value)}>
-            <MenuItem value="">None</MenuItem>
-            {(meta?.releases ?? []).filter((r) => r.status === 'unreleased').map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
-          </TextField>
-        </Grid>
+        {releasesOn && (
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField select label="Release" value={releaseId} fullWidth onChange={(e) => setReleaseId(e.target.value)}>
+              <MenuItem value="">None</MenuItem>
+              {(meta?.releases ?? []).filter((r) => r.status === 'unreleased').map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
+            </TextField>
+          </Grid>
+        )}
         <Grid size={12}>
           <LabelsInput value={labels} onChange={setLabels} />
         </Grid>
