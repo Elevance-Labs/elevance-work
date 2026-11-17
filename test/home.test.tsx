@@ -113,12 +113,19 @@ const menuStarting = (label: string) =>
   [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((m) => m.textContent?.includes(label))
 const todoRow = (title: string) => [...document.querySelectorAll('[data-todo]')].find((r) => r.querySelector<HTMLInputElement>('input[aria-label="Todo"]')?.value === title)
 const views = () => [...document.querySelectorAll('nav[aria-label="Todo lists"] [data-view]')].map((v) => v.getAttribute('data-view'))
+const heading = () => document.querySelector('h2')?.textContent
+// Navigations are transitions: the location probe moves before the page does,
+// so wait for the view's own heading (generously: CI is slower).
+async function openView(id: string, title: string) {
+  await click(document.querySelector(`nav [data-view="${id}"]`))
+  return waitFor(() => heading() === title, 5000)
+}
 
 reset()
 signInAs(PEOPLE.member)
 await mountApp('/todos')
 check('the Todos page opens on your Inbox: todos not filed in a list', !!todoRow('Write the brief') && !todoRow('Book the photographer'))
-check('…beside Today, Tomorrow, This week and your own lists', views().join() === 'inbox,today,tomorrow,week,tl-work', views().join())
+check('…beside Today, Tomorrow, This week and your own lists', await waitFor(() => views().join() === 'inbox,today,tomorrow,week,tl-work', 5000), views().join())
 
 await typeInto('New todo', 'Send the invoice')
 await click(button('Due date'))
@@ -177,8 +184,7 @@ check('…and file it in a list of your own', captured.rpcs.some((r) => r.name =
   await waitFor(() => !todoRow('Choose the hero photo')))
 
 // A list: what's filed there, and new todos go there.
-await click(document.querySelector('nav [data-view="tl-work"]'))
-check('a list shows the todos filed in it', await waitFor(() => location.search === '?list=tl-work') && !!todoRow('Book the photographer') &&
+check('a list shows the todos filed in it', await openView('tl-work', 'Work') && location.search === '?list=tl-work' && !!todoRow('Book the photographer') &&
   !todoRow('Send the invoice'))
 await typeInto('New todo', 'Hire a florist')
 await submit(labelled('New todo'))
@@ -191,15 +197,15 @@ check('a todo moves back to the Inbox', captured.rpcs.some((r) => r.name === 'to
   await waitFor(() => !todoRow('Book the photographer')))
 
 // Smart views, across lists.
-await click(document.querySelector('nav [data-view="today"]'))
+await openView('today', 'Today')
 check('Today: what is due today and overdue, from every list', await waitFor(() => !!todoRow('Book the photographer')) &&
   text().includes('Overdue (1)') && !todoRow('Send the invoice'))
-await click(document.querySelector('nav [data-view="tomorrow"]'))
+await openView('tomorrow', 'Tomorrow')
 check('Tomorrow: what is due tomorrow', await waitFor(() => !!todoRow('Send the invoice')) && !todoRow('Book the photographer'))
 await typeInto('New todo', 'Call the caterer')
 await submit(labelled('New todo'))
 check('…where a new todo is due tomorrow', captured.inserts.filter((i) => i.table === 'todos').at(-1)?.rows[0].due_on === '2026-10-22')
-await click(document.querySelector('nav [data-view="week"]'))
+await openView('week', 'This week')
 check('This week: overdue, then each day to Sunday', await waitFor(() => !!todoRow('Send the invoice')) && !!todoRow('Book the photographer') &&
   text().includes('Overdue (1)'))
 await click(button('More for Book the photographer'))
@@ -209,22 +215,22 @@ check('a todo can be deleted', captured.deletes.some((d) => d.table === 'todos' 
 await click(button('Smart views'))
 await click(menuStarting('Tomorrow'))
 await click(document.querySelector('.MuiBackdrop-root'))
-check('the smart views shown are yours to choose', await waitFor(() => views().join() === 'inbox,today,week,tl-work'), views().join())
+check('the smart views shown are yours to choose', await waitFor(() => views().join() === 'inbox,today,week,tl-work', 5000), views().join())
 
 await click(button('New list'))
 await typeInto('New list name', 'Home')
 await submit(labelled('New list name'))
 const newList = captured.inserts.find((i) => i.table === 'todo_lists')?.rows[0]
 check('a list is made in place, and opened', newList?.name === 'Home' && await waitFor(() => views().length === 5 &&
-  document.querySelector('h2')?.textContent === 'Home', 3000), document.querySelector('h2')?.textContent)
+  heading() === 'Home', 5000), heading())
 await click(button('List options for Home'))
 await click(menuStarting('Delete list'))
 check('deleting a list says its todos stay', !!dialog()?.textContent?.includes('back to your Inbox'))
 await click(button('Delete list', dialog()!))
-check('…and it goes', captured.deletes.some((d) => d.table === 'todo_lists') && await waitFor(() => location.search === '' && !views().includes(String(newList?.id))))
+check('…and it goes', captured.deletes.some((d) => d.table === 'todo_lists') && await waitFor(() => heading() === 'Inbox' && !views().includes(String(newList?.id)), 5000))
 
-await click(document.querySelector('nav [data-view="tl-work"]'))
-await waitFor(() => !!button('Show 1 done'))
+await openView('tl-work', 'Work')
+await waitFor(() => !!button('Show 1 done'), 5000)
 await click(button('Show 1 done'))
 await click(labelled('People on Choose the hero photo'))
 check('…the people on a todo show who made it', text().includes('Omar Farooq made this todo'))
@@ -235,11 +241,12 @@ check('…and you can leave one you were put on', captured.rpcs.some((r) => r.na
 reset()
 signInAs(PEOPLE.viewer)
 await mountApp('/todos')
-check('lists are your own: someone else sees theirs, not yours', views().join() === 'inbox,today,tomorrow,week,tl-omar', views().join())
+check('lists are your own: someone else sees theirs, not yours', await waitFor(() => views().join() === 'inbox,today,tomorrow,week,tl-omar', 5000), views().join())
 await click(button('More for Omar private todo'))
 check('whoever made a todo can delete it', !!labelled('Delete Omar private todo'))
 await click(document.querySelector('.MuiBackdrop-root'))
 await mountApp('/todos?list=tl-omar')
+await waitFor(() => heading() === 'Omar list' && !!button('Show 1 done'), 5000)
 await click(button('Show 1 done'))
 await click(labelled('People on Choose the hero photo'))
 check('…and sees the people on it, filed in their own list', text().includes('People you add see this todo'))
