@@ -36,7 +36,11 @@ export interface Profile {
   app_role: AppRole
   active: boolean
   created_at: string
+  /** How issues open on a wide screen (a phone is always full screen); only its owner changes it. */
+  issue_view: IssueViewMode
 }
+
+export type IssueViewMode = 'modal' | 'drawer'
 
 export interface Project {
   id: string

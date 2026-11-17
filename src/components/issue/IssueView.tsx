@@ -9,6 +9,7 @@ import {
   Breadcrumbs,
   Button,
   Divider,
+  Fab,
   Grid,
   IconButton,
   Link as MuiLink,
@@ -34,11 +35,14 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LinkIcon from '@mui/icons-material/Link'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import WebAssetOutlinedIcon from '@mui/icons-material/WebAssetOutlined'
 import { useMe } from '../../auth/AuthProvider'
 import { useNotifications } from '../../workspace/notifications'
 import { supabase } from '../../lib/supabase'
@@ -46,17 +50,21 @@ import { assignable, can, roleIn } from '../../lib/permissions'
 import { errorMessage, formatDayTime, timeAgo } from '../../lib/constants'
 import { ISSUE_COLUMNS, ISSUE_DETAIL_COLUMNS, issuePath, parentLevelFor, type IssueWrite } from '../../lib/issues'
 import { isBlankHtml, sanitizeHtml } from '../../lib/richText'
-import type { Attachment, Comment, CustomValues, DevLink, Doc, Issue, IssueDetail, IssueEvent, IssueLink, Profile } from '../../lib/types'
+import { releaseCountdown } from '../../lib/releases'
+import { clearDraft, draftKey, readDraft, writeDraft } from '../../lib/drafts'
+import type {
+  Attachment, Comment, CustomValues, DevLink, Doc, Issue, IssueDetail, IssueEvent, IssueLink, IssueViewMode, Profile,
+} from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { openSprints, useProjectMeta } from '../../workspace/useProjectMeta'
 import { emitIssueChange } from '../../workspace/issueEvents'
-import { ConfirmDialog, Loading, PersonAvatar, Section } from '../common'
+import { ConfirmDialog, Loading, Section } from '../common'
 import { CustomFieldInput, CustomFieldValue } from '../CustomFields'
 import { fieldsFor } from '../../lib/fields'
 import DocsList from '../DocsList'
 import TodoList from '../TodoList'
 import { useLayout } from '../layoutContext'
-import { ProjectAvatar, StatusLozenge, TypeIcon } from '../IssueBits'
+import { ProjectAvatar, TypeIcon } from '../IssueBits'
 import { IssuePicker, LabelsInput, PersonPicker, PrioritySelect, StatusSelect } from '../pickers'
 import { RichTextEditor } from '../RichText'
 import { RichTextView } from '../RichTextView'
@@ -129,6 +137,9 @@ async function loadIssue(key: string): Promise<Loaded | null> {
   }
 }
 
+/** The height of the phone dialog's pinned activity tabs. */
+const SHEET_BAR = 48
+
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Box>
@@ -140,11 +151,22 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-export default function IssueView({ issueKey, onClose }: { issueKey: string; onClose?: () => void }) {
+/**
+ * onClose: shown over a page (the dialog or the side panel) rather than as one.
+ * panel: in the side panel (full height, so it scrolls itself).
+ * viewMode / onViewMode: how issues open on a wide screen, chosen from here.
+ */
+export default function IssueView({ issueKey, onClose, panel = false, viewMode, onViewMode }: {
+  issueKey: string
+  onClose?: () => void
+  panel?: boolean
+  viewMode?: IssueViewMode
+  onViewMode?: (mode: IssueViewMode) => Promise<string | null>
+}) {
   const me = useMe()
   const navigate = useNavigate()
   const ws = useWorkspace()
-  const { profiles, issueTypes, projectById, typeById, statusById, statusesOf, profileById, roleOf } = ws
+  const { profiles, issueTypes, projectById, typeById, statusesOf, profileById, roleOf } = ws
   const [data, setData] = useState<Loaded | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'comments' | 'history'>('comments')
@@ -159,9 +181,19 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   const [typeAnchor, setTypeAnchor] = useState<HTMLElement | null>(null)
   const [parentAnchor, setParentAnchor] = useState<HTMLElement | null>(null)
   // On a phone the dialog is already full screen (IssueDialog's breakpoint):
-  // no "open as a page", and the header takes two rows.
+  // no "open as a page" nor a choice of how issues open. Two columns (the
+  // issue, its fields beside it) from a desktop's width, in the dialog and the
+  // side panel alike; narrower (a tablet, a phone) one column in reading order.
   const theme = useTheme()
   const phone = useMediaQuery(theme.breakpoints.down('md'))
+  const narrow = !useMediaQuery(theme.breakpoints.up('lg'))
+  // Narrow and filling the height (a phone's dialog, the side panel): a bar
+  // the issue scrolls under, and the activity a sheet pinned to the foot.
+  const pinned = narrow && !!onClose && (phone || panel)
+  // The side panel, wide: it scrolls itself, its header staying put.
+  const panelScroll = panel && !pinned
+  const [sheet, setSheet] = useState(false)
+  const [viewAnchor, setViewAnchor] = useState<HTMLElement | null>(null)
 
   const reload = useCallback(async () => {
     setData(await loadIssue(issueKey))
@@ -186,6 +218,20 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   useEffect(() => {
     if (issue?.id) markIssueRead(issue.id)
   }, [issue?.id, markIssueRead])
+  // An unsaved description is kept in this browser until it is saved or
+  // cancelled; editing again picks it up.
+  const descriptionDraftKey = issue ? draftKey(me.id, 'issue-description', issue.id) : null
+  const [draft, setDraft] = useState<string | null>(null)
+  useEffect(() => {
+    if (!descriptionDraftKey) return
+    const kept = readDraft(descriptionDraftKey)
+    // Saved since (here or elsewhere) to the same text: nothing is unsaved.
+    if (kept !== null && kept === issue?.description) clearDraft(descriptionDraftKey)
+    else setDraft(kept)
+    // Read once per issue; the draft then follows the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descriptionDraftKey])
+
   const project = projectById(issue?.project_id)
   const meta = useProjectMeta(issue?.project_id)
   const role = roleOf(issue?.project_id)
@@ -285,7 +331,27 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   }
 
   async function saveDescription() {
-    if (await save({ description: isBlankHtml(description) ? '' : sanitizeHtml(description) })) setEditingDescription(false)
+    if (await save({ description: isBlankHtml(description) ? '' : sanitizeHtml(description) })) {
+      dropDraft()
+      setEditingDescription(false)
+    }
+  }
+
+  function editDescription(html: string) {
+    setDescription(html)
+    const unsaved = html === issue!.description || (isBlankHtml(html) && isBlankHtml(issue!.description)) ? null : html
+    writeDraft(descriptionDraftKey!, unsaved)
+    setDraft(unsaved)
+  }
+
+  function dropDraft() {
+    clearDraft(descriptionDraftKey!)
+    setDraft(null)
+  }
+
+  function cancelDescription() {
+    dropDraft()
+    setEditingDescription(false)
   }
 
   async function toggleWatch() {
@@ -332,8 +398,8 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
     </MuiLink>
   )
 
-  // The epic (or parent) and the issue's own key.
-  const trail = [
+  // The epic (or parent), changed from here.
+  const parentCrumb =
     data.parent ? (
       <Stack key="parent" direction="row" sx={{ alignItems: 'center', '&:hover .change-parent, & .change-parent:focus-visible': { opacity: 1 } }}>
         <MuiLink component={Link} to={{ search: `?issue=${data.parent.key}` }} underline="hover" color="text.secondary"
@@ -358,8 +424,11 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
           Add epic
         </Button>
       )
-    ),
-    <Stack key="issue" direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+    )
+
+  // The issue's type (changed from its icon), key and link.
+  const keyCrumb = (
+    <Stack key="issue" direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
       {editable && sameLevelTypes.length > 1 ? (
         <Tooltip title={`${type?.name ?? 'Issue'}: change type`}>
           <IconButton size="small" aria-label="Change type" aria-haspopup="menu" onClick={(e) => setTypeAnchor(e.currentTarget)}
@@ -376,8 +445,8 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
           {copied ? <CheckIcon color="success" sx={{ fontSize: 16 }} /> : <LinkIcon sx={{ fontSize: 16 }} />}
         </IconButton>
       </Tooltip>
-    </Stack>,
-  ]
+    </Stack>
+  )
 
   const actions = (
     <>
@@ -391,6 +460,34 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
         <Tooltip title="Open as a page">
           <IconButton aria-label="Open as a page" component={Link} to={issuePath(issue.key)}><OpenInFullIcon fontSize="small" /></IconButton>
         </Tooltip>
+      )}
+      {onViewMode && !phone && (
+        <>
+          <Tooltip title="How issues open">
+            <IconButton aria-label="How issues open" aria-haspopup="menu" onClick={(e) => setViewAnchor(e.currentTarget)}>
+              {viewMode === 'drawer' ? <ViewSidebarOutlinedIcon fontSize="small" /> : <WebAssetOutlinedIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Menu anchorEl={viewAnchor} open={!!viewAnchor} onClose={() => setViewAnchor(null)}>
+            <Typography variant="caption" component="div" sx={{ px: 2, py: 0.5, color: 'text.secondary', fontWeight: 600 }}>
+              Open issues as
+            </Typography>
+            {([['modal', 'Dialog', <WebAssetOutlinedIcon key="i" fontSize="small" />],
+              ['drawer', 'Side panel', <ViewSidebarOutlinedIcon key="i" fontSize="small" />]] as const).map(([mode, label, icon]) => (
+              <MenuItem key={mode} selected={viewMode === mode}
+                onClick={async () => {
+                  setViewAnchor(null)
+                  if (mode === viewMode) return
+                  const failed = await onViewMode(mode)
+                  if (failed) setError(failed)
+                }}>
+                <ListItemIcon>{icon}</ListItemIcon>
+                {label}
+                {viewMode === mode && <CheckIcon fontSize="small" sx={{ ml: 'auto', pl: 2, color: 'primary.main' }} />}
+              </MenuItem>
+            ))}
+          </Menu>
+        </>
       )}
       {can.deleteIssues(role) && (
         <>
@@ -435,22 +532,34 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
     </>
   )
 
-  // A phone: the project and the actions on top, the epic / issue below.
-  // Wider: one row, the project leading the breadcrumb.
-  const header = phone ? (
-    // The top row's 40px buttons already leave room above the trail; match it below.
-    <Stack sx={{ mb: 1 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 40 }}>
-        <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex' }}>{projectLink}</Box>
-        {actions}
-      </Stack>
-      <Breadcrumbs sx={{ minWidth: 0, '& ol': { flexWrap: 'nowrap' } }}>{trail}</Breadcrumbs>
+  // Narrow: the key and the actions on top (on a phone or in the side panel, a
+  // bar the issue scrolls under), the project and the epic beneath. Wide: one
+  // row, the project leading the breadcrumb.
+  const phoneBar = (
+    <Stack direction="row" spacing={0.5} data-issue-bar
+      sx={{ alignItems: 'center', minHeight: 48, flex: 'none',
+        ...(pinned && { px: 2, pt: 0.5, borderBottom: 1, borderColor: 'divider' }) }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex' }}>{keyCrumb}</Box>
+      {actions}
     </Stack>
+  )
+  const phoneTrail = (
+    <Breadcrumbs sx={{ mt: 1, minWidth: 0, typography: 'body2', '& ol': { flexWrap: 'nowrap' }, '& li': { minWidth: 0 } }}>
+      {projectLink}
+      {parentCrumb}
+    </Breadcrumbs>
+  )
+  const header = narrow ? (
+    <>
+      {phoneBar}
+      {phoneTrail}
+    </>
   ) : (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minHeight: 40 }}>
       <Breadcrumbs sx={{ flexGrow: 1, minWidth: 0, '& ol': { flexWrap: 'nowrap' } }}>
         {projectLink}
-        {trail}
+        {parentCrumb}
+        {keyCrumb}
       </Breadcrumbs>
       {actions}
     </Stack>
@@ -487,21 +596,26 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
   )
 
   const descriptionBlock = (
-    <Section title="Description">
+    <Section title="Description"
+      action={draft !== null && editable && (
+        <Typography variant="caption" data-draft sx={{ color: 'warning.main', fontWeight: 600 }}>
+          {editingDescription ? 'Unsaved changes' : `Unsaved draft: ${phone ? 'tap' : 'click'} to continue`}
+        </Typography>
+      )}>
       {editingDescription ? (
         <Box>
-          <RichTextEditor label="Description" value={description} onChange={setDescription} mentionables={mentionables} autoFocus
+          <RichTextEditor label="Description" value={description} onChange={editDescription} mentionables={mentionables} autoFocus
             minHeight={160} onSubmit={saveDescription} />
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
             <Button variant="contained" size="small" onClick={saveDescription}>Save</Button>
-            <Button size="small" onClick={() => setEditingDescription(false)}>Cancel</Button>
+            <Button size="small" onClick={cancelDescription}>Cancel</Button>
           </Stack>
         </Box>
       ) : (
         <Box
           onClick={() => {
             if (!editable) return
-            setDescription(issue.description)
+            setDescription(draft ?? issue.description)
             setEditingDescription(true)
           }}
           sx={{ cursor: editable ? 'text' : 'default', borderRadius: 1, p: 1, mx: -1, '&:hover': editable ? { bgcolor: 'action.hover' } : undefined }}
@@ -532,158 +646,289 @@ export default function IssueView({ issueKey, onClose }: { issueKey: string; onC
       </Detail>
     ) : null
 
-  const details = (
-    <Stack spacing={2}>
-      <StatusSelect value={issue.status_id} statuses={statuses} disabled={!editable} onChange={(id) => save({ status_id: id })} />
-      <Box>
+  const statusField = (
+    <StatusSelect value={issue.status_id} statuses={statuses} disabled={!editable} onChange={(id) => save({ status_id: id })} />
+  )
+
+  // How long the issue's release has: whoever works on it sees the days left.
+  const release = meta?.releases.find((r) => r.id === issue.release_id)
+  const releaseDue = release ? releaseCountdown(release) : null
+
+  // Every other field. One column beside the issue; in one column, two per
+  // row from tablet width (a wide field keeps its row), one on a phone.
+  const single = narrow ? { xs: 12, sm: 6 } : 12
+  const fieldsGrid = (
+    <Grid container spacing={2}>
+      <Grid size={single}>
         <PersonPicker label="Assignee" value={issue.assignee_id} options={people} disabled={!editable}
           onChange={(id) => save({ assignee_id: id })} />
         {editable && issue.assignee_id !== me.id && people.some((p) => p.id === me.id) && (
           <Button size="small" sx={{ mt: 0.5, ml: -0.5 }} onClick={() => save({ assignee_id: me.id })}>Assign to me</Button>
         )}
-      </Box>
-      <PrioritySelect value={issue.priority} disabled={!editable} onChange={(p) => save({ priority: p })} />
-      {editable ? (
-        <LabelsInput value={issue.labels} onChange={(labels) => save({ labels })} />
-      ) : (
-        <Detail label="Labels"><Typography variant="body2">{issue.labels.join(', ') || 'None'}</Typography></Detail>
-      )}
-      <TextField key={`sp-${issue.story_points}`} label="Story points" type="number" defaultValue={issue.story_points ?? ''} disabled={!editable}
-        fullWidth slotProps={{ htmlInput: { min: 0, step: 0.5 } }}
-        onBlur={(e) => {
-          const v = e.target.value === '' ? null : Number(e.target.value)
-          if (v !== issue.story_points) save({ story_points: v })
-        }} />
-      <Grid container spacing={2}>
-        {sprintField && <Grid size={6}>{sprintField}</Grid>}
-        {meta && (
-          <Grid size={sprintField ? 6 : 12}>
-            <TextField select label="Release" value={issue.release_id ?? ''} disabled={!editable} fullWidth
-              onChange={(e) => save({ release_id: e.target.value || null })}>
-              <MenuItem value="">None</MenuItem>
-              {meta.releases.filter((r) => r.status !== 'archived' || r.id === issue.release_id).map((r) => (
-                <MenuItem key={r.id} value={r.id}>{r.name}{r.status === 'released' ? ' (released)' : ''}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-        )}
-        <Grid size={6}>
-          <TextField label="Start date" type="date" value={issue.start_date ?? ''} disabled={!editable} fullWidth
-            slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => save({ start_date: e.target.value || null })} />
-        </Grid>
-        <Grid size={6}>
-          <TextField label="Due date" type="date" value={issue.due_date ?? ''} disabled={!editable} fullWidth
-            slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => save({ due_date: e.target.value || null })} />
-        </Grid>
       </Grid>
-      {fields.map((f) =>
-        editable ? (
-          <CustomFieldInput key={`${f.id}-${JSON.stringify(issue.custom[f.id] ?? null)}`} field={f} value={issue.custom[f.id]}
-            people={profiles.filter((p) => p.active)} onChange={(v) => setCustom(f.id, v)} />
+      <Grid size={single}>
+        <PrioritySelect value={issue.priority} disabled={!editable} onChange={(p) => save({ priority: p })} />
+      </Grid>
+      <Grid size={12}>
+        {editable ? (
+          <LabelsInput value={issue.labels} onChange={(labels) => save({ labels })} />
         ) : (
-          <Detail key={f.id} label={f.name}>
-            <CustomFieldValue field={f} value={issue.custom[f.id]} person={profileById(issue.custom[f.id] as string)} />
-          </Detail>
-        ),
-      )}
-      <PersonPicker label="Reporter" value={issue.reporter_id} options={profiles.filter((p) => p.active)} disabled={!editable}
-        allowNone={false} onChange={(id) => id && save({ reporter_id: id })} />
-      <Divider />
-      <Stack spacing={0.5}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.created_at)}>
-          Created {timeAgo(issue.created_at)}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.updated_at)}>
-          Updated {timeAgo(issue.updated_at)}
-        </Typography>
-        {issue.resolved_at && (
-          <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.resolved_at)}>
-            Resolved {timeAgo(issue.resolved_at)}
-          </Typography>
+          <Detail label="Labels"><Typography variant="body2">{issue.labels.join(', ') || 'None'}</Typography></Detail>
         )}
-      </Stack>
+      </Grid>
+      <Grid size={single}>
+        <TextField key={`sp-${issue.story_points}`} label="Story points" type="number" defaultValue={issue.story_points ?? ''} disabled={!editable}
+          fullWidth slotProps={{ htmlInput: { min: 0, step: 0.5, inputMode: 'decimal' } }}
+          onBlur={(e) => {
+            const v = e.target.value === '' ? null : Number(e.target.value)
+            if (v !== issue.story_points) save({ story_points: v })
+          }} />
+      </Grid>
+      <Grid size={single}>
+        <PersonPicker label="Reporter" value={issue.reporter_id} options={profiles.filter((p) => p.active)} disabled={!editable}
+          allowNone={false} onChange={(id) => id && save({ reporter_id: id })} />
+      </Grid>
+      {sprintField && <Grid size={6}>{sprintField}</Grid>}
+      {meta && (
+        <Grid size={sprintField ? 6 : 12}>
+          <TextField select label="Release" value={issue.release_id ?? ''} disabled={!editable} fullWidth
+            helperText={releaseDue?.text} data-release-due={releaseDue?.tone}
+            slotProps={{ formHelperText: { sx: { mx: 0, fontWeight: releaseDue?.tone === 'later' ? undefined : 600,
+              color: releaseDue && { overdue: 'error.main', soon: 'warning.main', later: 'text.secondary', done: 'success.main' }[releaseDue.tone] } } }}
+            onChange={(e) => save({ release_id: e.target.value || null })}>
+            <MenuItem value="">None</MenuItem>
+            {meta.releases.filter((r) => r.status !== 'archived' || r.id === issue.release_id).map((r) => (
+              <MenuItem key={r.id} value={r.id}>{r.name}{r.status === 'released' ? ' (released)' : ''}</MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+      )}
+      <Grid size={6}>
+        <TextField label="Start date" type="date" value={issue.start_date ?? ''} disabled={!editable} fullWidth
+          slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => save({ start_date: e.target.value || null })} />
+      </Grid>
+      <Grid size={6}>
+        <TextField label="Due date" type="date" value={issue.due_date ?? ''} disabled={!editable} fullWidth
+          slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => save({ due_date: e.target.value || null })} />
+      </Grid>
+      {fields.map((f) => (
+        <Grid key={f.id} size={f.kind === 'text' ? 12 : single}>
+          {editable ? (
+            <CustomFieldInput key={JSON.stringify(issue.custom[f.id] ?? null)} field={f} value={issue.custom[f.id]}
+              people={profiles.filter((p) => p.active)} onChange={(v) => setCustom(f.id, v)} />
+          ) : (
+            <Detail label={f.name}>
+              <CustomFieldValue field={f} value={issue.custom[f.id]} person={profileById(issue.custom[f.id] as string)} />
+            </Detail>
+          )}
+        </Grid>
+      ))}
+    </Grid>
+  )
+
+  const stamps = (
+    <Stack direction={narrow ? 'row' : 'column'} sx={{ flexWrap: 'wrap', columnGap: 2, rowGap: 0.5 }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.created_at)}>
+        Created {timeAgo(issue.created_at)}
+      </Typography>
+      <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.updated_at)}>
+        Updated {timeAgo(issue.updated_at)}
+      </Typography>
+      {issue.resolved_at && (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }} title={formatDayTime(issue.resolved_at)}>
+          Resolved {timeAgo(issue.resolved_at)}
+        </Typography>
+      )}
     </Stack>
   )
 
-  return (
+  const quickAddBar = quickAdds.length > 0 && (
+    <Stack direction="row" role="toolbar" aria-label="Add to this issue" sx={{ flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+      {quickAdds.map((q) => (
+        <Button key={q.key} size="small" color="inherit" startIcon={q.icon} onClick={q.onClick}
+          {...(q.htmlFor ? { component: 'label', htmlFor: q.htmlFor } : {})}
+          sx={{ bgcolor: 'action.hover', color: 'text.secondary', borderRadius: 1.5, px: 1.25, fontWeight: 500, whiteSpace: 'nowrap',
+            '&:hover': { bgcolor: 'action.selected', color: 'text.primary' } }}>
+          {q.label}
+        </Button>
+      ))}
+    </Stack>
+  )
+
+  // What's attached to the issue: each shows once it has something (or is asked for).
+  const sections = (
+    <>
+      {show('children') && (
+        <Children parent={issue} issues={data.children} role={role} startAdding={revealed.includes('children')}
+          onChange={(children) => setData((d) => d && { ...d, children })} />
+      )}
+      {show('links') && (
+        <Links issue={issue} links={data.links} role={role} startAdding={revealed.includes('links')}
+          onChange={(links) => setData((d) => d && { ...d, links })} />
+      )}
+      <Development links={data.devLinks} />
+      <Attachments issueId={issue.id} attachments={data.attachments} role={role} inputId={attachInputId} collapsed={!show('attach')}
+        onChange={(attachments) => setData((d) => d && { ...d, attachments })} />
+      {show('docs') && (
+        <Section title="Docs">
+          <DocsList projectId={issue.project_id} issueId={issue.id} docs={data.docs} role={role} dense
+            onChange={(docs) => setData((d) => d && { ...d, docs })} />
+        </Section>
+      )}
+      {/* Yours and the ones you're on: todos are not the issue's, so
+          anyone who can see the issue may keep them here. Mounted while
+          folded away, to know whether there are any. */}
+      <Box hidden={!show('todos')}>
+        <Section title="Todos">
+          <TodoList issue={{ id: issue.id, key: issue.key }} onCount={setTodoCount} autoFocus={revealed.includes('todos')} />
+        </Section>
+      </Box>
+    </>
+  )
+
+  const commentsLabel = `Comments${data.comments.length ? ` (${data.comments.length})` : ''}`
+  const activityContent = tab === 'comments' ? (
+    <Comments issueId={issue.id} comments={data.comments} attachments={data.attachments} role={role} mentionables={mentionables}
+      onChange={(comments) => setData((d) => d && { ...d, comments })}
+      onAttachmentsChange={(update) => setData((d) => d && { ...d, attachments: update(d.attachments) })} />
+  ) : (
+    <History events={data.events} />
+  )
+
+  const activity = (
     <Box>
-      {header}
-      {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mt: 1 }}>{error}</Alert>}
-      <Grid container spacing={{ xs: 3, md: 4 }} sx={{ mt: 0.5 }}>
-        <Grid size={{ xs: 12, md: 8 }}>
-          <Stack spacing={3}>
-            <Box>
-              {titleBlock}
-              <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center', display: { md: 'none' } }}>
-                <StatusLozenge status={statusById(issue.status_id)} />
-                <PersonAvatar person={profileById(issue.assignee_id)} size={22} tooltip />
-              </Stack>
-              {quickAdds.length > 0 && (
-                <Stack direction="row" role="toolbar" aria-label="Add to this issue" sx={{ flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
-                  {quickAdds.map((q) => (
-                    <Button key={q.key} size="small" color="inherit" startIcon={q.icon} onClick={q.onClick}
-                      {...(q.htmlFor ? { component: 'label', htmlFor: q.htmlFor } : {})}
-                      sx={{ bgcolor: 'action.hover', color: 'text.secondary', borderRadius: 1.5, px: 1.25, fontWeight: 500,
-                        '&:hover': { bgcolor: 'action.selected', color: 'text.primary' } }}>
-                      {q.label}
-                    </Button>
-                  ))}
-                </Stack>
-              )}
-            </Box>
-            {descriptionBlock}
-            {show('children') && (
-              <Children parent={issue} issues={data.children} role={role} startAdding={revealed.includes('children')}
-                onChange={(children) => setData((d) => d && { ...d, children })} />
-            )}
-            {show('links') && (
-              <Links issue={issue} links={data.links} role={role} startAdding={revealed.includes('links')}
-                onChange={(links) => setData((d) => d && { ...d, links })} />
-            )}
-            <Development links={data.devLinks} />
-            <Attachments issueId={issue.id} attachments={data.attachments} role={role} inputId={attachInputId} collapsed={!show('attach')}
-              onChange={(attachments) => setData((d) => d && { ...d, attachments })} />
-            {show('docs') && (
-              <Section title="Docs">
-                <DocsList projectId={issue.project_id} issueId={issue.id} docs={data.docs} role={role} dense
-                  onChange={(docs) => setData((d) => d && { ...d, docs })} />
-              </Section>
-            )}
-            {/* Yours and the ones you're on: todos are not the issue's, so
-                anyone who can see the issue may keep them here. Mounted while
-                folded away, to know whether there are any. */}
-            <Box hidden={!show('todos')}>
-              <Section title="Todos">
-                <TodoList issue={{ id: issue.id, key: issue.key }} onCount={setTodoCount} autoFocus={revealed.includes('todos')} />
-              </Section>
-            </Box>
-            <Box>
-              <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-                <Tab value="comments" label={`Comments${data.comments.length ? ` (${data.comments.length})` : ''}`} />
-                <Tab value="history" label="History" />
-              </Tabs>
-              {tab === 'comments' ? (
-                <Comments issueId={issue.id} comments={data.comments} attachments={data.attachments} role={role} mentionables={mentionables}
-                  onChange={(comments) => setData((d) => d && { ...d, comments })}
-                  onAttachmentsChange={(update) => setData((d) => d && { ...d, attachments: update(d.attachments) })} />
-              ) : (
-                <History events={data.events} />
-              )}
-            </Box>
-          </Stack>
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }} sx={{ order: { xs: -1, md: 0 } }}>
-          <Box sx={{ position: { md: 'sticky' }, top: { md: 0 } }}>{details}</Box>
-        </Grid>
-      </Grid>
-      <ConfirmDialog open={deleting} title={`Delete ${issue.key}?`} destructive confirmLabel="Delete" busy={busy}
-        message={
-          <>
-            It and its comments, history{level === 'standard' ? ' and sub-tasks' : ''} are deleted for good.
-            {level === 'epic' && ' Its issues stay, without an epic.'} Files stay in Google Drive.
-          </>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} variant={narrow ? 'fullWidth' : 'standard'}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab value="comments" label={commentsLabel} />
+        <Tab value="history" label="History" />
+      </Tabs>
+      {activityContent}
+    </Box>
+  )
+
+  // In the phone dialog and the narrow side panel, comments and history are tabs pinned to the foot: a
+  // tab slides them up over the issue, under its bar; the same tab, the
+  // floating button or Esc folds them away.
+  const openTab = (v: typeof tab) => () => {
+    if (sheet && tab === v) return setSheet(false)
+    setTab(v)
+    setSheet(true)
+  }
+  const safeBottom = 'env(safe-area-inset-bottom, 0px)'
+  const activitySheet = (
+    <Box data-activity={sheet ? 'open' : 'closed'}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && sheet && !e.defaultPrevented) {
+          e.stopPropagation()
+          setSheet(false)
         }
-        onConfirm={remove} onClose={() => setDeleting(false)} />
+      }}
+      sx={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column', bgcolor: 'background.paper',
+        borderTop: 1, borderColor: 'divider', boxShadow: sheet ? 8 : 'none',
+        transform: sheet ? 'none' : `translateY(calc(100% - ${SHEET_BAR}px - ${safeBottom}))`,
+        transition: theme.transitions.create(['transform', 'box-shadow'], { duration: theme.transitions.duration.shorter }) }}>
+      <Stack direction="row" sx={{ alignItems: 'center', flex: 'none', pb: sheet ? 0 : safeBottom }}>
+        <Tabs value={tab} variant="fullWidth" aria-label="Activity"
+          sx={{ flexGrow: 1, minHeight: SHEET_BAR,
+            '& .MuiTabs-indicator': { opacity: sheet ? 1 : 0 },
+            ...(!sheet && { '& .MuiTab-root.Mui-selected': { color: 'text.secondary' } }) }}>
+          <Tab value="comments" label={commentsLabel} onClick={openTab('comments')} sx={{ minHeight: SHEET_BAR }} />
+          <Tab value="history" label="History" onClick={openTab('history')} sx={{ minHeight: SHEET_BAR }} />
+        </Tabs>
+      </Stack>
+      <Box data-activity-body inert={!sheet} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, pt: 2, pb: `calc(72px + ${safeBottom})` }}>
+        {activityContent}
+      </Box>
+      {sheet && (
+        <Fab size="small" color="default" aria-label="Hide activity" onClick={() => setSheet(false)}
+          sx={{ position: 'absolute', right: 16, bottom: `calc(16px + ${safeBottom})` }}>
+          <ExpandMoreIcon />
+        </Fab>
+      )}
+    </Box>
+  )
+
+  const phoneBody = (
+    // Narrow, the issue reads top to bottom: what it is, what state it's in,
+    // what it says, what's on it, its fields, then the conversation.
+    <Stack spacing={2.5} sx={{ mt: 3 }}>
+      <Box>
+        {titleBlock}
+        {quickAddBar}
+      </Box>
+      {statusField}
+      {descriptionBlock}
+      {sections}
+      <Section title="Details">
+        {fieldsGrid}
+        <Box sx={{ mt: 2 }}>{stamps}</Box>
+      </Section>
+      {!pinned && activity}
+    </Stack>
+  )
+
+  const errorAlert = error && <Alert severity="error" onClose={() => setError(null)} sx={{ mt: 1 }}>{error}</Alert>
+  const confirmDelete = (
+    <ConfirmDialog open={deleting} title={`Delete ${issue.key}?`} destructive confirmLabel="Delete" busy={busy}
+      message={
+        <>
+          It and its comments, history{level === 'standard' ? ' and sub-tasks' : ''} are deleted for good.
+          {level === 'epic' && ' Its issues stay, without an epic.'} Files stay in Google Drive.
+        </>
+      }
+      onConfirm={remove} onClose={() => setDeleting(false)} />
+  )
+
+  // The phone dialog and the narrow side panel fill their height: the bar, the issue
+  // scrolling beneath it, the activity tabs at the foot.
+  if (pinned) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        {phoneBar}
+        {errorAlert && <Box sx={{ px: 2, flex: 'none' }}>{errorAlert}</Box>}
+        <Box sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+          <Box inert={sheet} sx={{ height: '100%', overflowY: 'auto', px: 2, pt: 1.5, pb: `calc(${SHEET_BAR + 24}px + ${safeBottom})` }}>
+            {phoneTrail}
+            {phoneBody}
+          </Box>
+          {activitySheet}
+        </Box>
+        {confirmDelete}
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={panelScroll ? { flex: 1, minHeight: 0, overflowY: 'auto', px: 3, pb: 3 } : undefined}>
+      <Box sx={panelScroll ? { position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper', mx: -3, px: 3, pt: 1.5, pb: 1,
+        borderBottom: 1, borderColor: 'divider' } : undefined}>
+        {header}
+      </Box>
+      {errorAlert}
+      {narrow ? phoneBody : (
+        <Grid container spacing={4} sx={{ mt: 2.5 }}>
+          <Grid size={8}>
+            <Stack spacing={3}>
+              <Box>
+                {titleBlock}
+                {quickAddBar}
+              </Box>
+              {descriptionBlock}
+              {sections}
+              {activity}
+            </Stack>
+          </Grid>
+          <Grid size={4}>
+            <Stack spacing={2} sx={{ position: 'sticky', top: panelScroll ? 72 : 0 }}>
+              {statusField}
+              {fieldsGrid}
+              <Divider />
+              {stamps}
+            </Stack>
+          </Grid>
+        </Grid>
+      )}
+      {confirmDelete}
     </Box>
   )
 }

@@ -44,6 +44,7 @@ function person(id: string, full_name: string, app_role: 'admin' | 'member', act
     app_role,
     active,
     created_at: at('2026-09-01'),
+    issue_view: 'modal',
   }
 }
 
@@ -672,7 +673,8 @@ class Query implements PromiseLike<Result> {
 // Simplified stand-ins for the SQL functions: enough for the pages to show
 // the result. The rules they enforce are tested in test/sql/.
 const RPCS: Record<string, (args: Row) => unknown> = {
-  bind_profile: () => authState.bound,
+  // The stored row, as the database would (what you changed on it sticks).
+  bind_profile: () => (authState.bound && (rowsIn('profiles').find((p) => p.id === authState.bound!.id) as Profile | undefined)) ?? authState.bound,
   current_profile_id: () => authState.bound?.id ?? null,
   project_create: ({ p_key, p_name, p_kind, p_visibility, p_description }) => {
     const id = `new-${nextId++}`

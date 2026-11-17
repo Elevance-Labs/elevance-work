@@ -64,6 +64,11 @@ export function setupDom(url = 'http://localhost/') {
       dispatchEvent: () => false,
     }
   }
+  // jsdom has no layout: a rich text editor focused with text in it measures a
+  // Range to scroll to the caret, so ranges measure as nothing.
+  const R = (w as unknown as { Range: { prototype: Record<string, unknown> } }).Range.prototype
+  R.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] })
+  R.getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON() {} })
   // jsdom has no layout, so MUI's Autocomplete/Popper need a stub.
   g.ResizeObserver = w.ResizeObserver ??= class {
     observe() {}

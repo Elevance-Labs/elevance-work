@@ -1,5 +1,5 @@
 // Release progress and release notes: what shipped, grouped by kind of work.
-import { formatDate } from './constants'
+import { daysBetween, formatDate, isoDate, todayIso } from './constants'
 import type { Issue, IssueType, ProjectStatus, Release } from './types'
 
 export interface ReleaseProgress {
@@ -13,6 +13,26 @@ export function releaseProgress(issues: Issue[], statuses: ProjectStatus[]): Rel
   const cat = new Map(statuses.map((s) => [s.id, s.category]))
   const of = (c: string) => issues.filter((i) => cat.get(i.status_id) === c).length
   return { total: issues.length, done: of('done'), inProgress: of('in_progress'), todo: of('todo') }
+}
+
+/** How close a release is: its days left in words, and how loudly to say it. */
+export interface ReleaseCountdown {
+  text: string
+  tone: 'overdue' | 'soon' | 'later' | 'done'
+}
+
+/** Days left to an unreleased release's date ("9 days left", "Due today", "2 days late"); null without a date or once archived. */
+export function releaseCountdown(release: Release, today = todayIso()): ReleaseCountdown | null {
+  if (release.status === 'archived') return null
+  if (release.status === 'released') {
+    return { text: release.released_at ? `Released ${formatDate(isoDate(new Date(release.released_at)), false)}` : 'Released', tone: 'done' }
+  }
+  if (!release.release_date) return null
+  const days = daysBetween(today, release.release_date)
+  const on = formatDate(release.release_date, false)
+  if (days < 0) return { text: `${-days} day${days === -1 ? '' : 's'} late (due ${on})`, tone: 'overdue' }
+  if (days === 0) return { text: `Due today (${on})`, tone: 'soon' }
+  return { text: `${days} day${days === 1 ? '' : 's'} left (${on})`, tone: days <= 3 ? 'soon' : 'later' }
 }
 
 // Bugs read as fixes; everything else by its type's name, in this order.

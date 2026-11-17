@@ -11,7 +11,7 @@ const { EMPTY_FILTER, applyFilter, filterFromSearch, filterToSearch, filterToQue
 const { rankBetween, rankForIndex, parseIssueKey, normaliseLabels } = await import('../src/lib/issues')
 const { docTypeFromUrl, embedUrl } = await import('../src/lib/drive')
 const { sanitizeHtml, mentionedIds, isBlankHtml } = await import('../src/lib/richText')
-const { releaseNotes, notesText } = await import('../src/lib/releases')
+const { releaseNotes, notesText, releaseCountdown } = await import('../src/lib/releases')
 const { roleIn } = await import('../src/lib/permissions')
 const { suggestKey } = await import('../src/lib/projects')
 const { matchesWords, searchTodos, searchNotes, isShortcut } = await import('../src/lib/search')
@@ -249,6 +249,17 @@ check('release notes: stories first, then fixes; sub-tasks roll up; unfinished l
   notes.sections.map((s) => s.title).join() === 'New and changed,Bug fixes' && notes.unfinished.length === 1, JSON.stringify(notes.sections.map((s) => s.title)))
 check('…as plain text to paste', notesText('Site', { name: 'v1', release_date: null, description: '' } as never, notes.sections) ===
   'Site v1\n\nNew and changed\n• W-1 Hero\n\nBug fixes\n• W-2 Broken link')
+
+// ---------------- a release's days left ----------------
+const relRow = (extra: object) => ({ status: 'unreleased', release_date: '2026-10-30', released_at: null, ...extra }) as never
+const due = (extra: object, today = '2026-10-21') => releaseCountdown(relRow(extra), today)
+check('a release counts the days left to its date', due({})?.text.startsWith('9 days left') && due({})?.tone === 'later', JSON.stringify(due({})))
+check('…three or fewer are soon', due({}, '2026-10-29')?.text.startsWith('1 day left') && due({}, '2026-10-27')?.tone === 'soon')
+check('…its day says due today', due({}, '2026-10-30')?.text.startsWith('Due today') && due({}, '2026-10-30')?.tone === 'soon')
+check('…past it, how late', due({}, '2026-11-01')?.text.startsWith('2 days late') && due({}, '2026-10-31')?.text.startsWith('1 day late') &&
+  due({}, '2026-11-01')?.tone === 'overdue')
+check('…released says so; no date or archived says nothing', due({ status: 'released', released_at: '2026-10-28T10:00:00Z' })?.tone === 'done' &&
+  due({ release_date: null }) === null && due({ status: 'archived' }) === null)
 
 // ---------------- notes ----------------
 const { matchesNote, noteFilterFromParams, noteFilterToParams, noteHeading, meetingLabel, EMPTY_NOTE_FILTER } = await import('../src/lib/notes')

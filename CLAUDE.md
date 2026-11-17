@@ -136,7 +136,7 @@ behaviour).
 | `src/pages/admin/` | People, issue types, workspace settings (workspace admins). |
 | `src/components/` | Shell, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
-| `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
+| `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to a project or to pinned ones: the notes page, the project tab, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
@@ -162,8 +162,10 @@ behaviour).
   others redirected). A project RLS hides reads as "no project you can see".
 - `/admin/people`, `/admin/issue-types`, `/admin/workspace` — workspace admins;
   gated by not registering the routes in `src/App.tsx`, and hidden in the nav.
-- `?issue=KEY` on any route opens the issue dialog (lazy, in `Layout`); the
-  create dialog is opened through `useLayout().openCreate(defaults)`.
+- `?issue=KEY` on any route opens the issue (`IssueDialog`, lazy, in
+  `Layout`): a dialog or a non-modal right-hand side panel, as the person
+  chose from the issue (`profiles.issue_view`); a phone is always full
+  screen. The create dialog is opened through `useLayout().openCreate(defaults)`.
 - The account menu opens **Notifications** (`NotificationSettings`, lazy).
   `Layout` also follows a tapped device notification (the worker's `open`
   message): an issue opens over the current page, as from the bell.
@@ -206,7 +208,10 @@ behaviour).
 - `fields.ts` — which custom fields apply to a type, required checks.
 - `reports.ts` — history replay (`stateAt`), burndown, velocity, sprint report,
   created vs resolved, cumulative flow, breakdowns, workload, recent counts.
-- `releases.ts` — progress and release notes (text and HTML).
+- `releases.ts` — progress, days left (`releaseCountdown`, on the issue's
+  Release field) and release notes (text and HTML).
+- `drafts.ts` — unsaved text kept in the browser per person (an issue's
+  description until saved or cancelled).
 - `timeline.ts` — the epic timeline: rows (an epic's own dates, or borrowed
   from its issues), the window of months drawn, placing a bar, dragging one.
 - `devLinks.ts` — ordering an issue's GitHub links.
@@ -241,7 +246,8 @@ behaviour).
 Full detail in `supabase/schema.sql`.
 
 - `profiles` — who may sign in; `app_role` admin / member; `active`; bound by
-  email. Everyone signed in reads all; admins write; you may rename yourself.
+  email. Everyone signed in reads all; admins write; you may rename yourself;
+  `issue_view` (dialog or side panel) only its owner sets (`profiles_guard`).
 - `projects` (+ `project_members` with `project_role`) — key immutable,
   `issue_counter`, kind, visibility, lead, colour, Drive folder, archived.
 - `project_statuses` — a project's workflow (position, category, WIP limit).

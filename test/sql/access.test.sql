@@ -42,12 +42,20 @@ select t.eq('…but not someone else',
   t.rows($$update public.profiles set title = 'Boss' where email = 'omar@elevancelabs.com'$$), 0::bigint);
 select t.throws('nobody can bind a profile by hand',
   $$update public.profiles set user_id = null where email = 'sara@elevancelabs.com'$$, '42501');
+select t.eq('a member chooses how their issues open',
+  t.rows($$update public.profiles set issue_view = 'drawer' where email = 'sara@elevancelabs.com'$$), 1::bigint);
+select t.throws('…only as a dialog or a side panel',
+  $$update public.profiles set issue_view = 'tab' where email = 'sara@elevancelabs.com'$$, '23514');
 
 select t.login('amna');
 select t.eq('an admin adds people',
   t.rows($$insert into public.profiles (email, full_name) values ('new@elevancelabs.com', 'New Person')$$), 1::bigint);
 select t.throws('only company addresses',
   $$insert into public.profiles (email, full_name) values ('x@gmail.com', 'X')$$, '23514');
+select t.throws('…not even an admin chooses it for someone else',
+  $$update public.profiles set issue_view = 'modal' where email = 'sara@elevancelabs.com'$$, '42501');
+select t.eq('…while an admin still edits the rest of them',
+  t.rows($$update public.profiles set title = 'Lead' where email = 'sara@elevancelabs.com'$$), 1::bigint);
 select t.throws('the last active admin can''t step down',
   $$update public.profiles set app_role = 'member' where email = 'amna@elevancelabs.com'$$, '23514');
 select t.throws('people are never deleted',

@@ -45,7 +45,9 @@ create table public.profiles (
   app_role   public.app_role not null default 'member',
   active     boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- How issues open on a wide screen: over the page, or in a side panel.
+  issue_view text not null default 'modal' check (issue_view in ('modal', 'drawer'))
 );
 
 create function public.current_profile_id()
@@ -126,6 +128,12 @@ begin
       raise exception 'Only a workspace admin can change a role, an email or access.'
         using errcode = '42501';
     end if;
+  end if;
+  -- How issues open is each person's own choice, even an admin's to make.
+  if auth.uid() is not null and tg_op = 'UPDATE'
+     and new.issue_view is distinct from old.issue_view
+     and old.id is distinct from public.current_profile_id() then
+    raise exception 'Only you choose how your issues open.' using errcode = '42501';
   end if;
 
   if tg_op = 'UPDATE' then
@@ -1821,7 +1829,7 @@ revoke all on all functions in schema public from public, anon, authenticated;
 -- Everything below needs a bound, active profile; anon gets nothing.
 grant select on public.profiles to authenticated;
 grant insert (email, full_name, title, app_role, active) on public.profiles to authenticated;
-grant update (email, full_name, title, app_role, active) on public.profiles to authenticated;
+grant update (email, full_name, title, app_role, active, issue_view) on public.profiles to authenticated;
 
 -- Projects are created only by project_create; key, counter and Drive folder
 -- are never client-writable.

@@ -3,7 +3,7 @@
 // (through the drive function), and deleting.
 import {
   setupDom, reporter, text, button, click, dialog, type, typeInto, choose, labelled, submit, settleLazy, write, pickFile, menuItem,
-  freezeToday, settle, waitFor, setScreen,
+  freezeToday, settle, waitFor, setScreen, field,
 } from './setup'
 setupDom()
 
@@ -126,6 +126,9 @@ await choose('Priority', 'Highest', dialog()!)
 check('…and the priority', lastUpdate('issues')?.values.priority === 'highest')
 await choose('Sprint', 'Backlog', dialog()!)
 check('…and the sprint', lastUpdate('issues')?.values.sprint_id === null)
+const releaseField = field('Release', dialog()!)
+check('the release shows the days it has left', !!releaseField?.textContent?.includes('9 days left') &&
+  releaseField?.getAttribute('data-release-due') === 'later', releaseField?.textContent ?? 'no release field')
 await choose('Release', 'None', dialog()!)
 check('…and the release', lastUpdate('issues')?.values.release_id === null)
 
@@ -240,6 +243,106 @@ check('…Add todo opens them, the bar focused', !labelled('New todo', dialog()!
 await click(button('Add sub-task', dialog()!))
 check('…Add sub-task opens the sub-task form', !!labelled('New sub-task', dialog()!) && document.activeElement === labelled('New sub-task', dialog()!))
 
+// ---------------- closing the dialog ----------------
+reset()
+signInAs(PEOPLE.member)
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+const container = dialog()!.closest('.MuiDialog-container')!
+container.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true }))
+await click(container)
+check('a click outside the dialog closes it', await waitFor(() => !location.search.includes('issue=')), location.search)
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+dialog()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+check('…and so does Esc', await waitFor(() => !location.search.includes('issue=')), location.search)
+
+// ---------------- a dialog or a side panel ----------------
+// Each person picks, from the issue, how issues open on a wide screen; it is
+// kept on their profile. The side panel leaves the page usable.
+reset()
+signInAs(PEOPLE.member)
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+check('an issue opens as a dialog at first', !!dialog()?.closest('.MuiDialog-root') && !!document.querySelector('.MuiBackdrop-root'))
+await click(button('How issues open', dialog()!))
+check('…the issue offers a dialog or a side panel', !!menuItem('Dialog') && !!menuItem('Side panel'))
+await click(menuItem('Side panel'))
+check('…choosing saves it on your profile', lastUpdate('profiles')?.values.issue_view === 'drawer' &&
+  JSON.stringify(lastUpdate('profiles')?.filters) === '[["id","eq","p-sara"]]', JSON.stringify(lastUpdate('profiles')))
+check('…and it moves to a side panel, the page still usable', await waitFor(() => !!dialog()?.classList.contains('MuiDrawer-paper')) &&
+  !document.querySelector('.MuiDialog-root') && !document.querySelector('.MuiBackdrop-root') && text().includes('Fix the footer links'))
+await settleLazy()
+check('…on a desktop two columns, as in the dialog', !dialog()?.querySelector('[data-issue-bar]') &&
+  !dialog()?.querySelector('[data-activity]') && !!dialog()?.querySelector('.MuiGrid-grid-xs-8') && !!field('Status', dialog()!))
+check('…keeping "open as a page"', !!dialog()?.querySelector('[aria-label="Open as a page"]'))
+setScreen({ width: 1024 })
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+check('…on a tablet one column, the activity pinned at its foot', !!dialog()?.classList.contains('MuiDrawer-paper') &&
+  !!dialog()?.querySelector('[data-issue-bar]') && dialog()?.querySelector<HTMLElement>('[data-activity]')?.dataset.activity === 'closed' &&
+  !dialog()?.querySelector('.MuiGrid-grid-xs-8'))
+setScreen({ width: 1280 })
+await mountApp('/projects/WEB/issues?issue=WEB-3')
+await settleLazy()
+check('the next issue opens in the side panel too', !!dialog()?.classList.contains('MuiDrawer-paper') && !!dialog()?.textContent?.includes('WEB-3'))
+await click(document.querySelector('a[href*="issue=WEB-2"]'))
+check('…another issue clicked on the page takes its place', await waitFor(() => location.search.includes('issue=WEB-2') &&
+  !!dialog()?.classList.contains('MuiDrawer-paper')) && (await settle(), location.search.includes('issue=WEB-2')), location.search)
+await settleLazy()
+await click(document.querySelector('h1:not([role="dialog"] h1)') ?? document.querySelector('main'))
+check('…a click anywhere else closes it', await waitFor(() => !location.search.includes('issue=')), location.search)
+await mountApp('/projects/WEB/issues?issue=WEB-3')
+await settleLazy()
+document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+check('…and so does Esc, wherever the focus is', await waitFor(() => !location.search.includes('issue=')), location.search)
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+await click(button('How issues open', dialog()!))
+await click(menuItem('Dialog'))
+check('…and the dialog can be chosen back', lastUpdate('profiles')?.values.issue_view === 'modal' &&
+  await waitFor(() => !!dialog()?.closest('.MuiDialog-root')))
+setScreen({ width: 1024 })
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+const tabletOrder = [field('Status', dialog()!), [...dialog()!.querySelectorAll('h2')].find((h) => h.textContent === 'Description'),
+  field('Assignee', dialog()!), dialog()!.querySelector('[role="tab"]')]
+check('the dialog on a tablet is one column too: status, description, fields, then comments in place',
+  !dialog()?.querySelector('.MuiGrid-grid-xs-8') && !dialog()?.querySelector('[data-activity]') &&
+  tabletOrder.every((el, k) => el && (k === 0 || tabletOrder[k - 1]!.compareDocumentPosition(el) & window.Node.DOCUMENT_POSITION_FOLLOWING)),
+  tabletOrder.map((el) => (el ? 'ok' : 'missing')).join(' '))
+setScreen({ width: 1280 })
+
+// ---------------- an unsaved description is kept ----------------
+// Typed and left without saving, it stays in this browser: editing again picks
+// it up; Save or Cancel drops it.
+reset()
+signInAs(PEOPLE.member)
+window.localStorage.clear()
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+const draftStored = () => window.localStorage.getItem('el-work:draft:p-sara:issue-description:i-web-2')
+const openDescription = () => click([...dialog()!.querySelectorAll('p')].find((p) => p.textContent === 'Add a description…'))
+await openDescription()
+await write('Description', '<p>Half a thought</p>', dialog()!)
+check('a description being typed is kept in the browser', draftStored() === '<p>Half a thought</p>', String(draftStored()))
+await click(button('Close', dialog()!))
+await waitFor(() => !dialog())
+check('…closing without saving sends nothing', !captured.updates.some((u) => u.table === 'issues'))
+await mountApp('/projects/WEB/issues?issue=WEB-2')
+await settleLazy()
+check('…opened again, the issue says there is an unsaved draft', !!dialog()?.querySelector('[data-draft]'))
+await click([...dialog()!.querySelectorAll('p')].find((p) => p.textContent === 'Add a description…'))
+check('…and editing picks it up', dialog()!.querySelector('.ProseMirror[aria-label="Description"]')?.textContent === 'Half a thought')
+await click(button('Cancel', dialog()!))
+check('…Cancel drops it', draftStored() === null && !dialog()?.querySelector('[data-draft]') && !captured.updates.some((u) => u.table === 'issues'))
+await openDescription()
+await write('Description', '<p>The whole thought</p>', dialog()!)
+await click(button('Save', dialog()!))
+check('…Save saves it and drops the draft', await waitFor(() => lastUpdate('issues')?.values.description === '<p>The whole thought</p>') &&
+  draftStored() === null && !dialog()?.querySelector('[data-draft]'), JSON.stringify(lastUpdate('issues')))
+window.localStorage.clear()
+
 // ---------------- what a viewer can't do ----------------
 reset()
 signInAs(PEOPLE.viewer)
@@ -273,21 +376,57 @@ await settleLazy()
 check('an unknown key says so', text().includes("WEB-99 doesn't exist, or you don't have access"))
 
 // ---------------- the issue view on a phone ----------------
-// The dialog is full screen already: no "open as a page"; the project and the
-// actions share the top row, the epic and the issue's key sit beneath.
+// The dialog is full screen already: no "open as a page"; the key and the
+// actions share the pinned top bar, the project and the epic sit beneath, then
+// one column in reading order: title, quick adds, status, description, the
+// other fields. Comments and history are tabs pinned to the foot that slide up
+// over the issue.
 reset()
 signInAs(PEOPLE.member)
 setScreen({ width: 390 })
 await mountApp('/projects/WEB/issues?issue=WEB-2')
 await settleLazy()
 const phoneDialog = dialog()!
-const topRow = phoneDialog.querySelector('[aria-label="Close"]')?.parentElement
+const topRow = phoneDialog.querySelector<HTMLElement>('[data-issue-bar]')
 check('on a phone the issue has no "open as a page"', !phoneDialog.querySelector('[aria-label="Open as a page"]'))
-check('…the project shares the top row with the actions', !!topRow?.textContent?.includes('Website') &&
-  !!topRow?.querySelector('[aria-label="Watch"], [aria-label="Stop watching"]') && !topRow?.querySelector('nav'))
+check('…nor a choice of how issues open: always full screen', !phoneDialog.querySelector('[aria-label="How issues open"]'))
+check('…the key shares the top row with the actions', !!topRow?.textContent?.includes('WEB-2') && !topRow?.textContent?.includes('Website') &&
+  !!topRow?.querySelector('[aria-label="Close"]') && !!topRow?.querySelector('[aria-label="Watch"], [aria-label="Stop watching"]'),
+  topRow?.textContent ?? 'no top row')
 const trail = phoneDialog.querySelector('nav')
-check('…and the epic and the key are the row beneath', !!trail?.textContent?.includes('WEB-1') && !!trail?.textContent?.includes('WEB-2') &&
-  !trail?.textContent?.includes('Website'))
+check('…the project and the epic are the row beneath', !!trail?.textContent?.includes('Website') && !!trail?.textContent?.includes('WEB-1') &&
+  !trail?.textContent?.includes('WEB-2'), trail?.textContent ?? 'no trail')
+const inOrder = [
+  topRow,
+  phoneDialog.querySelector('h1'),
+  phoneDialog.querySelector('[role="toolbar"][aria-label="Add to this issue"]'),
+  field('Status', phoneDialog),
+  [...phoneDialog.querySelectorAll('h2')].find((h) => h.textContent === 'Description'),
+  field('Assignee', phoneDialog),
+  field('Reporter', phoneDialog),
+]
+check('…then title, quick adds, status, description and the other fields, in that order',
+  inOrder.every((el, k) => el && (k === 0 || inOrder[k - 1]!.compareDocumentPosition(el) & window.Node.DOCUMENT_POSITION_FOLLOWING)),
+  inOrder.map((el) => (el ? 'ok' : 'missing')).join(' '))
+const sheet = () => phoneDialog.querySelector<HTMLElement>('[data-activity]')!
+const sheetBody = () => sheet().querySelector<HTMLElement>('[data-activity-body]')!
+check('…comments and history are tabs pinned at the foot, folded', sheet()?.dataset.activity === 'closed' &&
+  !!sheetBody().hasAttribute('inert') && !!button('Comments (1)', sheet()) && !!button('History', sheet()))
+await click(button('Comments (1)', sheet()))
+check('…a tab slides them up over the issue', sheet().dataset.activity === 'open' && !sheetBody().hasAttribute('inert') &&
+  sheetBody().textContent!.includes('Use the new photo'))
+await click(button('History', sheet()))
+check('…the other tab switches, still open', sheet().dataset.activity === 'open' && !sheetBody().textContent!.includes('Use the new photo'))
+await click(button('History', sheet()))
+check('…the open tab folds them away again', sheet().dataset.activity === 'closed')
+check('…with no button of their own while folded', !button('Hide activity', sheet()) && !button('Show activity', sheet()))
+await click(button('History', sheet()))
+await click(button('Hide activity', sheet()))
+check('…once open, a floating button folds them', sheet().dataset.activity === 'closed' && !button('Hide activity', sheet()))
+await click(button('History', sheet()))
+sheet().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+await settle()
+check('…and Esc folds them, leaving the issue open', sheet().dataset.activity === 'closed' && !!dialog())
 setScreen({ width: 1280 })
 
 done()
