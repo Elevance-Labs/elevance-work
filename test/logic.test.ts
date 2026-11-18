@@ -41,7 +41,7 @@ const issue = (id: string, extra: Partial<Issue> = {}): Issue => ({
   id, project_id: 'p', number: 1, key: id.toUpperCase(), type_id: 't', status_id: 'todo', title: id, priority: 'medium',
   assignee_id: null, reporter_id: null, parent_id: null, sprint_id: null, release_id: null, story_points: null, start_date: null,
   due_date: null, labels: [], rank: 1, custom: {}, resolved_at: null, created_at: '2026-10-01T09:00:00', updated_at: '2026-10-01T09:00:00',
-  ...extra,
+  flag_reason: null, flagged_by: null, flagged_at: null, ...extra,
 })
 let eid = 0
 const ev = (issue_id: string, field: string, at: string, from: string | null, to: string | null, extra: Partial<IssueEvent> = {}): IssueEvent => ({
@@ -189,6 +189,13 @@ check('the board’s filter matches loaded issues the same way',
   matchesFilter(issue('q', { assignee_id: 'p1', title: 'Hero', labels: ['seo'] }), { ...EMPTY_FILTER, assignees: ['me'], text: 'her' }, ctx) &&
   !matchesFilter(issue('q', { assignee_id: 'p2' }), { ...EMPTY_FILTER, assignees: ['me'] }, ctx) &&
   matchesFilter(issue('q'), { ...EMPTY_FILTER, assignees: ['none'] }, ctx))
+check('flagged or not, on loaded issues',
+  matchesFilter(issue('q', { flag_reason: 'Waiting' }), { ...EMPTY_FILTER, flagged: 'yes' }, ctx) &&
+  !matchesFilter(issue('q'), { ...EMPTY_FILTER, flagged: 'yes' }, ctx) &&
+  matchesFilter(issue('q'), { ...EMPTY_FILTER, flagged: 'no' }, ctx) &&
+  !matchesFilter(issue('q', { flag_reason: 'Waiting' }), { ...EMPTY_FILTER, flagged: 'no' }, ctx))
+check('…and in the address', filterFromSearch(new URLSearchParams('flagged=yes')).flagged === 'yes' &&
+  filterToSearch({ ...EMPTY_FILTER, flagged: 'no' }).toString() === 'flagged=no')
 check('CSV quotes values and defuses formulas', issuesToCsv([{ A: '=1+1', B: 'say "hi"', C: null }]) === '"A","B","C"\r\n"\'=1+1","say ""hi""",""')
 
 // ---------------- ranks and keys ----------------
@@ -390,7 +397,9 @@ check('the last thing done to an issue, in words',
   activityLine({ kind: 'change', field: 'created', to_value: 'WEB-1' }) === 'created the issue' &&
   activityLine({ kind: 'change', field: 'status', to_value: 'Done' }) === 'set Status to Done' &&
   activityLine({ kind: 'change', field: 'priority', to_value: 'high' }) === 'set Priority to High' &&
-  activityLine({ kind: 'change', field: 'assignee', to_value: null }) === 'cleared Assignee',
+  activityLine({ kind: 'change', field: 'assignee', to_value: null }) === 'cleared Assignee' &&
+  activityLine({ kind: 'change', field: 'flag', to_value: 'Waiting on keys' }) === 'flagged the issue' &&
+  activityLine({ kind: 'change', field: 'flag', to_value: null }) === 'removed the flag',
   activityLine({ kind: 'change', field: 'priority', to_value: 'high' }))
 
 // ---------------- the Summary's judgements (insights) ----------------
@@ -542,6 +551,7 @@ check('the last thing done to an issue, in words',
       issue('fresh', { number: 4, status_id: 'doing', created_at: at('2026-10-20') }),
       issue('focus', { number: 5 }),
       issue('fine', { number: 6, assignee_id: 'p1', story_points: 1 }),
+      issue('flagged', { number: 7, flag_reason: 'Waiting on legal' }),
     ],
     byIssue: new Map(),
     statuses,
@@ -552,10 +562,11 @@ check('the last thing done to an issue, in words',
     today: '2026-10-21',
     now,
   })
-  check('needs attention: blocked and overdue first, then stuck, then unowned sprint work',
-    list.map((a) => a.issue.id).join() === 'blocked,late,stuck,focus', list.map((a) => a.issue.id).join())
+  check('needs attention: flagged, blocked and overdue first, then stuck, then unowned sprint work',
+    list.map((a) => a.issue.id).join() === 'blocked,late,flagged,stuck,focus', list.map((a) => a.issue.id).join())
   check('…each saying why', list[0].reasons[0].text === 'Blocked by X-9' && list[1].reasons[0].text === '2 days overdue' &&
-    list[3].reasons.map((r) => r.kind).join() === 'unassigned,unestimated', JSON.stringify(list.map((a) => a.reasons)))
+    list[2].reasons[0].text === 'Flagged: Waiting on legal' &&
+    list[4].reasons.map((r) => r.kind).join() === 'unassigned,unestimated', JSON.stringify(list.map((a) => a.reasons)))
 }
 
 // ---------------- widgets and project features ----------------

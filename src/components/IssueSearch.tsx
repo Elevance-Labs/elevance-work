@@ -67,7 +67,8 @@ import { useIssueChanges } from '../workspace/issueEvents'
 import { emitItemChange } from '../workspace/itemEvents'
 import { setPinned, usePinnedViews } from '../workspace/usePinnedViews'
 import { EmptyState, FormDialog, Loading, PersonAvatar, PersonName } from './common'
-import { IssueKey, Labels, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
+import { FlagMark, IssueKey, Labels, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
+import { flaggedSx } from './issue/flagging'
 import { useIssueHref } from './useIssueHref'
 
 const PAGE = 100
@@ -227,6 +228,7 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
       Created: i.created_at.slice(0, 10),
       Updated: i.updated_at.slice(0, 10),
       Resolved: i.resolved_at?.slice(0, 10) ?? null,
+      Flag: i.flag_reason,
     })))
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
@@ -338,6 +340,13 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
               <MenuItem value="30d">Last 30 days</MenuItem>
             </TextField>
           </Grid>
+          <Grid size={6}>
+            <TextField select fullWidth label="Flagged" value={filter.flagged} onChange={(e) => setFilter({ flagged: e.target.value as IssueFilter['flagged'] })}>
+              <MenuItem value="">Any</MenuItem>
+              <MenuItem value="yes">Flagged</MenuItem>
+              <MenuItem value="no">Not flagged</MenuItem>
+            </TextField>
+          </Grid>
         </Grid>
       </Box>
     </Popover>
@@ -410,14 +419,17 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
             </TableHead>
             <TableBody>
               {rows.map((i) => (
-                <TableRow key={i.id} hover>
+                <TableRow key={i.id} hover data-issue={i.key} sx={[flaggedSx(i)]}>
                   <TableCell><TypeIcon type={typeById(i.type_id)} /></TableCell>
                   <TableCell><IssueKey issueKey={i.key} done={!!i.resolved_at} /></TableCell>
                   <TableCell sx={{ maxWidth: 420 }}>
-                    <Typography component={Link} to={href(i.key)} variant="body2" sx={{ color: 'text.primary', textDecoration: 'none', display: 'block',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', '&:hover': { textDecoration: 'underline' } }}>
-                      {i.title}
-                    </Typography>
+                    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
+                      <Typography component={Link} to={href(i.key)} variant="body2" sx={{ color: 'text.primary', textDecoration: 'none', display: 'block',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, '&:hover': { textDecoration: 'underline' } }}>
+                        {i.title}
+                      </Typography>
+                      <FlagMark issue={i} size={16} />
+                    </Stack>
                     <Labels labels={i.labels} max={2} />
                   </TableCell>
                   {showProject && <TableCell><Typography variant="body2" noWrap>{project(i)?.name}</Typography></TableCell>}
@@ -437,10 +449,12 @@ export default function IssueSearch({ projectId }: { projectId?: string }) {
       ) : (
         <Stack spacing={1}>
           {rows.map((i) => (
-            <Paper key={i.id} variant="outlined" component={Link} to={href(i.key)} sx={{ p: 1.5, display: 'block', textDecoration: 'none', color: 'inherit' }}>
+            <Paper key={i.id} variant="outlined" component={Link} to={href(i.key)} data-issue={i.key}
+              sx={[{ p: 1.5, display: 'block', textDecoration: 'none', color: 'inherit' }, flaggedSx(i), !!i.flag_reason && { borderColor: 'warning.main' }]}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
                 <TypeIcon type={typeById(i.type_id)} />
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>{i.key}</Typography>
+                <FlagMark issue={i} />
                 <Box sx={{ flexGrow: 1 }} />
                 <PriorityIcon priority={i.priority} />
                 <PersonAvatar person={profileById(i.assignee_id)} size={22} />

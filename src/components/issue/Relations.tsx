@@ -14,7 +14,8 @@ import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { emitIssueChange } from '../../workspace/issueEvents'
 import { useLayout } from '../layoutContext'
 import { PersonAvatar, Section } from '../common'
-import { IssueKey, StatusLozenge, TypeIcon } from '../IssueBits'
+import { FlagMark, IssueKey, StatusLozenge, TypeIcon } from '../IssueBits'
+import { flaggedSx } from './flagging'
 import { useIssueHref } from '../useIssueHref'
 import { IssuePicker } from '../pickers'
 
@@ -23,13 +24,15 @@ function IssueRow({ issue, trailing }: { issue: Issue; trailing?: ReactNode }) {
   const href = useIssueHref()
   const status = statusById(issue.status_id)
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 0.5, px: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
+    <Stack direction="row" spacing={1} data-issue={issue.key}
+      sx={[{ alignItems: 'center', py: 0.5, px: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }, flaggedSx(issue)]}>
       <TypeIcon type={typeById(issue.type_id)} />
       <IssueKey issueKey={issue.key} done={status?.category === 'done'} />
       <Typography component={Link} to={href(issue.key)} variant="body2" noWrap
         sx={{ flexGrow: 1, minWidth: 0, color: 'text.primary', textDecoration: 'none' }}>
         {issue.title}
       </Typography>
+      <FlagMark issue={issue} />
       <StatusLozenge status={status} />
       <PersonAvatar person={profileById(issue.assignee_id)} size={22} tooltip />
       {trailing}

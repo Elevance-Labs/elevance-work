@@ -72,6 +72,7 @@ import { RichTextView } from '../RichTextView'
 import Attachments from './Attachments'
 import Development from './Development'
 import Comments from './Comments'
+import { FlagButton, FlagDialog } from './Flag'
 import History from './History'
 import { Children, Links, type LinkedIssue } from './Relations'
 
@@ -177,6 +178,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
   const [description, setDescription] = useState('')
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [flagging, setFlagging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [typeAnchor, setTypeAnchor] = useState<HTMLElement | null>(null)
@@ -292,27 +294,35 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
   // A type can change only within its level (issues_guard keeps the hierarchy).
   const sameLevelTypes = issueTypes.filter((t) => t.level === level && (!t.archived || t.id === issue.type_id))
 
+  // Saves a change: whether it was saved; why not, in the view's alert.
   async function save(patch: IssueWrite) {
-    if (!issue) return false
     setError(null)
+    const failed = await write(patch)
+    if (failed) setError(failed)
+    return !failed
+  }
+
+  // Saves a change: why it wasn't saved, or null.
+  async function write(patch: IssueWrite) {
+    if (!issue) return "That change wasn't saved."
     const { data: row, error: e } = await supabase.from('issues').update(patch).eq('id', issue.id).select(ISSUE_DETAIL_COLUMNS).single()
-    if (e || !row) {
-      setError(errorMessage(e, "That change wasn't saved."))
-      return false
-    }
+    if (e || !row) return errorMessage(e, "That change wasn't saved.")
     setData((d) => (d ? { ...d, issue: row as unknown as IssueDetail } : d))
     emitIssueChange(issue.id)
-    // The history and watchers come from triggers.
-    const [events, watchers] = await Promise.all([
+    // The history and watchers come from triggers; so does a flag's comment.
+    const flag = 'flag_reason' in patch
+    const [events, watchers, comments] = await Promise.all([
       supabase.from('issue_events').select('*').eq('issue_id', issue.id).order('created_at'),
       supabase.from('issue_watchers').select('profile_id').eq('issue_id', issue.id),
+      flag ? supabase.from('comments').select('*').eq('issue_id', issue.id).order('created_at') : Promise.resolve({ data: null }),
     ])
     setData((d) => d && {
       ...d,
       events: (events.data ?? d.events) as IssueEvent[],
       watchers: ((watchers.data ?? []) as { profile_id: string }[]).map((w) => w.profile_id),
+      comments: (comments.data ?? d.comments) as Comment[],
     })
-    return true
+    return null
   }
 
   // The epic (or a sub-task's parent) is changed from the breadcrumb.
@@ -566,7 +576,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
     </Stack>
   )
 
-  const titleBlock = editingTitle ? (
+  const titleText = editingTitle ? (
     <TextField
       autoFocus
       fullWidth
@@ -594,6 +604,14 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
     >
       {issue.title}
     </Typography>
+  )
+
+  // The title, and at its far right the issue's flag: lit when flagged.
+  const titleBlock = (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>{titleText}</Box>
+      <FlagButton issue={issue} editable={editable} onFlag={() => setFlagging(true)} onRemove={() => save({ flag_reason: null })} />
+    </Stack>
   )
 
   const descriptionBlock = (
@@ -871,6 +889,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
   )
 
   const errorAlert = error && <Alert severity="error" onClose={() => setError(null)} sx={{ mt: 1 }}>{error}</Alert>
+  const flagDialog = <FlagDialog issue={flagging ? issue : null} onSubmit={(reason) => write({ flag_reason: reason })} onClose={() => setFlagging(false)} />
   const confirmDelete = (
     <ConfirmDialog open={deleting} title={`Delete ${issue.key}?`} destructive confirmLabel="Delete" busy={busy}
       message={
@@ -897,6 +916,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
           {activitySheet}
         </Box>
         {confirmDelete}
+        {flagDialog}
       </Box>
     )
   }
@@ -932,6 +952,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
         </Grid>
       )}
       {confirmDelete}
+      {flagDialog}
     </Box>
   )
 }

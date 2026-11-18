@@ -1,7 +1,7 @@
 // The board: a column per status, in workflow order. Scrum boards show the
 // active sprint; Kanban boards show everything, with done work dropping off
 // after two weeks. Dragging changes status (and, in assignee lanes, the
-// assignee) and order; so does each card's menu.
+// assignee) and order; so does each card's menu, which also flags an issue.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -32,6 +32,7 @@ import { useIssueChanges } from '../../workspace/issueEvents'
 import { useLayout } from '../../components/layoutContext'
 import { EmptyState, Loading, PersonAvatar } from '../../components/common'
 import { BoardCard, type MoveGroup } from '../../components/IssueCard'
+import { useFlagMenu } from '../../components/issue/flagging'
 import { useProject } from './projectContext'
 
 type GroupBy = 'none' | 'assignee' | 'epic'
@@ -98,6 +99,7 @@ export default function Board() {
   const [text, setText] = useState('')
   const [people, setPeople] = useState<string[]>([])
   const [onlyMine, setOnlyMine] = useState(false)
+  const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [dragging, setDragging] = useState<Issue | null>(null)
 
   const load = useCallback(async () => {
@@ -156,8 +158,9 @@ export default function Board() {
     return (issues ?? []).filter((i) =>
       (!t || i.key.toLowerCase().includes(t) || i.title.toLowerCase().includes(t)) &&
       (!people.length || people.includes(i.assignee_id ?? 'none')) &&
-      (!onlyMine || i.assignee_id === me.id)).sort(byRank)
-  }, [issues, text, people, onlyMine, me.id])
+      (!onlyMine || i.assignee_id === me.id) &&
+      (!onlyFlagged || !!i.flag_reason)).sort(byRank)
+  }, [issues, text, people, onlyMine, onlyFlagged, me.id])
 
   const epicOf = (i: Issue) => {
     if (!i.parent_id) return null
@@ -208,6 +211,7 @@ export default function Board() {
     }
   }
 
+  const flags = useFlagMenu(setError)
   const movesFor = (i: Issue): MoveGroup[] =>
     editable
       ? [
@@ -219,6 +223,7 @@ export default function Board() {
               { label: 'Bottom of column', onSelect: () => move(i, i.status_id, 'end') },
             ],
           },
+          flags.group(i),
         ]
       : []
 
@@ -300,6 +305,10 @@ export default function Board() {
         </AvatarGroup>
         <Chip label="Only my issues" clickable color={onlyMine ? 'primary' : 'default'} variant={onlyMine ? 'filled' : 'outlined'}
           onClick={() => setOnlyMine((v) => !v)} />
+        {(onlyFlagged || issues.some((i) => i.flag_reason)) && (
+          <Chip label="Flagged" clickable color={onlyFlagged ? 'primary' : 'default'} variant={onlyFlagged ? 'filled' : 'outlined'}
+            aria-pressed={onlyFlagged} onClick={() => setOnlyFlagged((v) => !v)} />
+        )}
         <Box sx={{ flexGrow: 1 }} />
         <TextField select label="Group by" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)} sx={{ minWidth: 140 }}>
           <MenuItem value="none">None</MenuItem>
@@ -356,6 +365,7 @@ export default function Board() {
           {profiles.length > 0 && editable && 'Create one to get started.'}
         </Typography>
       )}
+      {flags.dialog}
     </Box>
   )
 }

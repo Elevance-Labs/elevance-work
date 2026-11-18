@@ -737,6 +737,11 @@ create table public.issues (
   search       tsvector generated always as (
                  to_tsvector('simple', key || ' ' || title || ' ' ||
                    left(regexp_replace(description, '<[^>]*>', ' ', 'g'), 20000))) stored,
+  -- A flag: the issue is held up, and why. Null is not flagged; who flagged
+  -- it and when are stamped by issues_guard.
+  flag_reason  text check (length(flag_reason) <= 2000),
+  flagged_by   uuid references public.profiles (id) on delete set null,
+  flagged_at   timestamptz,
   unique (project_id, number),
   check (due_date >= start_date)
 );
@@ -748,6 +753,7 @@ create index issues_status_idx on public.issues (status_id);
 create index issues_release_idx on public.issues (release_id);
 create index issues_labels_idx on public.issues using gin (labels);
 create index issues_search_idx on public.issues using gin (search);
+create index issues_flagged_idx on public.issues (project_id) where flag_reason is not null;
 
 create function public.can_view_issue(p_issue uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
@@ -938,6 +944,23 @@ begin
   new.custom := public.issue_custom_clean(new.project_id, new.type_id, coalesce(new.custom, '{}'),
                                           case when tg_op = 'UPDATE' then old.custom end);
 
+  -- A flag always says why. Flagging stamps who and when; changing the
+  -- reason keeps them; removing the flag clears them.
+  new.flag_reason := trim(new.flag_reason);
+  if new.flag_reason = '' then
+    raise exception 'Say why this issue is flagged.' using errcode = '23514';
+  end if;
+  if new.flag_reason is null then
+    new.flagged_by := null;
+    new.flagged_at := null;
+  elsif tg_op = 'INSERT' or old.flag_reason is null then
+    new.flagged_by := public.current_profile_id();
+    new.flagged_at := now();
+  else
+    new.flagged_by := old.flagged_by;
+    new.flagged_at := old.flagged_at;
+  end if;
+
   if v_category = 'done' then
     new.resolved_at := case when tg_op = 'UPDATE' and old.resolved_at is not null then old.resolved_at else now() end;
   else
@@ -947,10 +970,10 @@ begin
   -- Reordering alone isn't an update anyone needs to hear about.
   if tg_op = 'UPDATE' and (new.type_id, new.status_id, new.title, new.description, new.priority, new.assignee_id,
                            new.reporter_id, new.parent_id, new.sprint_id, new.release_id, new.story_points,
-                           new.start_date, new.due_date, new.labels, new.custom)
+                           new.start_date, new.due_date, new.labels, new.custom, new.flag_reason)
       is distinct from (old.type_id, old.status_id, old.title, old.description, old.priority, old.assignee_id,
                         old.reporter_id, old.parent_id, old.sprint_id, old.release_id, old.story_points,
-                        old.start_date, old.due_date, old.labels, old.custom) then
+                        old.start_date, old.due_date, old.labels, old.custom, old.flag_reason) then
     new.updated_at := now();
   elsif tg_op = 'UPDATE' then
     new.updated_at := old.updated_at;
@@ -1609,6 +1632,22 @@ begin
     perform public.log_issue_event(new.id, new.project_id, 'labels',
       array_to_string(old.labels, ', '), array_to_string(new.labels, ', '));
   end if;
+  if new.flag_reason is distinct from old.flag_reason then
+    perform public.log_issue_event(new.id, new.project_id, 'flag', old.flag_reason, new.flag_reason);
+    -- Said in the conversation too, as whoever did it (comments_guard
+    -- stamps the author; the comment's own trigger tells the watchers).
+    -- The reason is plain text: escaped, its lines kept.
+    insert into public.comments (issue_id, body)
+    values (new.id,
+      case
+        when new.flag_reason is null then '<p>🚩 <strong>Flag removed</strong></p>'
+        else '<p>🚩 <strong>' || case when old.flag_reason is null then 'Flag added' else 'Flag reason changed' end
+             || '</strong></p><p>'
+             || replace(replace(replace(replace(replace(new.flag_reason,
+                  '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), E'\n', '<br>')
+             || '</p>'
+      end);
+  end if;
   if new.description <> old.description then
     perform public.log_issue_event(new.id, new.project_id, 'description', null, null);
     foreach w in array public.mentioned_ids(new.description) loop
@@ -2115,8 +2154,9 @@ grant select, delete on public.issues to authenticated;
 grant insert (project_id, type_id, status_id, title, description, priority, assignee_id, reporter_id, parent_id,
               sprint_id, release_id, story_points, start_date, due_date, labels, rank, custom)
   on public.issues to authenticated;
+-- A flag is set and removed by whoever may edit the issue; who and when are stamped.
 grant update (type_id, status_id, title, description, priority, assignee_id, reporter_id, parent_id,
-              sprint_id, release_id, story_points, start_date, due_date, labels, rank, custom)
+              sprint_id, release_id, story_points, start_date, due_date, labels, rank, custom, flag_reason)
   on public.issues to authenticated;
 
 grant select on public.issue_events, public.sprint_issues to authenticated;

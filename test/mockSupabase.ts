@@ -138,6 +138,9 @@ function issue(n: number, project: 'WEB' | 'OPS', title: string, extra: Row = {}
     rank: n * 1024,
     custom: {},
     resolved_at: null,
+    flag_reason: null,
+    flagged_by: null,
+    flagged_at: null,
     created_by: 'p-sara',
     created_at: at('2026-10-10'),
     updated_at: at('2026-10-15'),
@@ -291,6 +294,7 @@ function insertDefaults(table: string, row: Row): Row {
       return {
         description: '', priority: 'medium', assignee_id: null, parent_id: null, sprint_id: null, release_id: null, story_points: null,
         start_date: null, due_date: null, labels: [], custom: {}, rank: maxRank + 1024, ...row,
+        flag_reason: null, flagged_by: null, flagged_at: null,
         status_id: statusId, number, key: `${p.key}-${number}`, reporter_id: row.reporter_id ?? me()?.id, created_by: me()?.id,
         resolved_at: categoryOf(statusId) === 'done' ? now : null, created_at: now, updated_at: now,
         ...(level === 'subtask' && parent ? { sprint_id: parent.sprint_id } : {}),
@@ -348,6 +352,11 @@ function updateEffects(table: string, row: Row, values: Row) {
   if (table === 'issues') {
     if ('status_id' in values) row.resolved_at = categoryOf(values.status_id) === 'done' ? row.resolved_at ?? new Date().toISOString() : null
     row.updated_at = new Date().toISOString()
+    // issues_guard: a flag stamps who and when; a new reason keeps them; removing it clears them.
+    if ('flag_reason' in values) {
+      if (!values.flag_reason) Object.assign(row, { flag_reason: null, flagged_by: null, flagged_at: null })
+      else if (!row.flagged_at) Object.assign(row, { flagged_by: me()?.id, flagged_at: new Date().toISOString() })
+    }
   }
   if (table === 'comments') row.edited_at = new Date().toISOString()
   if (table === 'notes' && ('title' in values || 'body' in values)) row.updated_at = new Date().toISOString()
@@ -650,6 +659,14 @@ class Query implements PromiseLike<Result> {
           if (this.name === 'issues' && 'release_id' in input[0] && input[0].release_id !== r.release_id) {
             resetApprovals(r.release_id)
             resetApprovals(input[0].release_id)
+          }
+          // issues_after_write: a flag's change is posted as a comment, as whoever made it.
+          if (this.name === 'issues' && 'flag_reason' in input[0] && (input[0].flag_reason || null) !== (r.flag_reason || null)) {
+            const to = input[0].flag_reason as string | null
+            const title = !to ? 'Flag removed' : r.flag_reason ? 'Flag reason changed' : 'Flag added'
+            rowsIn('comments').push({ id: `new-${nextId++}`, issue_id: r.id, author_id: me()?.id ?? null, edited_at: null,
+              body: `<p>🚩 <strong>${title}</strong></p>${to ? `<p>${to.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>` : ''}`,
+              created_at: new Date().toISOString() })
           }
           Object.assign(r, input[0])
           updateEffects(this.name, r, input[0])

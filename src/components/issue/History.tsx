@@ -1,6 +1,6 @@
 import { Stack, Typography } from '@mui/material'
 import { formatDayTime, timeAgo } from '../../lib/constants'
-import { HISTORY_FIELD_LABELS, historyValue } from '../../lib/issues'
+import { HISTORY_FIELD_LABELS, flagChange, historyValue } from '../../lib/issues'
 import type { IssueEvent } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { PersonAvatar } from '../common'
@@ -22,9 +22,17 @@ export default function History({ events }: { events: IssueEvent[] }) {
                   ? 'created the issue'
                   : e.field === 'description'
                     ? 'updated the description'
-                    : <>changed <strong>{HISTORY_FIELD_LABELS[e.field] ?? e.field}</strong></>}
+                    : e.field === 'flag'
+                      ? flagChange(e.from_value, e.to_value)
+                      : <>changed <strong>{HISTORY_FIELD_LABELS[e.field] ?? e.field}</strong></>}
               </Typography>
-              {e.field !== 'created' && e.field !== 'description' && (
+              {/* A flag: its reason (on removal, the one it had). */}
+              {e.field === 'flag' && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
+                  {e.from_value && e.to_value ? `${e.from_value} → ${e.to_value}` : e.to_value ?? e.from_value}
+                </Typography>
+              )}
+              {e.field !== 'created' && e.field !== 'description' && e.field !== 'flag' && (
                 <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>
                   {historyValue(e.field, e.from_value)} → {historyValue(e.field, e.to_value)}
                 </Typography>

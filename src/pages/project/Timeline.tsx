@@ -13,6 +13,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import TimelineIcon from '@mui/icons-material/ViewTimelineOutlined'
+import FlagIcon from '@mui/icons-material/Flag'
 import { supabase } from '../../lib/supabase'
 import { errorMessage, formatDate, formatDateRange, todayIso } from '../../lib/constants'
 import { ISSUE_COLUMNS, isDone } from '../../lib/issues'
@@ -23,7 +24,7 @@ import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { useProjectMeta } from '../../workspace/useProjectMeta'
 import { useIssueChanges } from '../../workspace/issueEvents'
 import { EmptyState, Loading } from '../../components/common'
-import { IssueKey, TypeIcon } from '../../components/IssueBits'
+import { FlagMark, IssueKey, TypeIcon } from '../../components/IssueBits'
 import { useIssueHref } from '../../components/useIssueHref'
 import { ReleaseDialog } from '../../components/calendar/ItemDialogs'
 import { featureOn } from '../../lib/projectFeatures'
@@ -130,7 +131,7 @@ export default function Timeline() {
     const at = shown(issue, span)
     const { offset, length } = place(window_, at.start, at.end)
     const resolved = isDone(issue, statuses)
-    const label = `${issue.key} ${issue.title}, ${formatDateRange(at.start, at.end)}`
+    const label = `${issue.key} ${issue.title}, ${formatDateRange(at.start, at.end)}${issue.flag_reason ? '. Flagged' : ''}`
 
     const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return
@@ -175,6 +176,7 @@ export default function Timeline() {
         title={
           <>
             {label}
+            {issue.flag_reason && <>: {issue.flag_reason}</>}
             {opts.borrowed && <><br />From its issues' dates. Drag it to give the epic its own.</>}
             {editable && <><br />Drag to move, drag an end to stretch.</>}
           </>
@@ -219,8 +221,13 @@ export default function Timeline() {
           {handle('end')}
           {opts.height >= 20 && (
             <Typography variant="caption" noWrap sx={{ position: 'relative', display: 'block', px: 1.25, lineHeight: `${opts.height}px`, color: '#fff', fontWeight: 500, pointerEvents: 'none' }}>
+              {issue.flag_reason && <FlagIcon aria-hidden sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5, mt: '-2px' }} />}
               {issue.title}
             </Typography>
+          )}
+          {/* Too thin for words: a flagged bar is outlined instead. */}
+          {opts.height < 20 && issue.flag_reason && (
+            <Box data-flagged sx={{ position: 'absolute', inset: 0, borderRadius: 1, border: 2, borderColor: 'error.main', pointerEvents: 'none' }} />
           )}
         </Box>
       </Tooltip>
@@ -255,6 +262,7 @@ export default function Timeline() {
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
               <TypeIcon type={typeById(r.epic.type_id)} />
               <IssueKey issueKey={r.epic.key} done={isDone(r.epic, statuses)} />
+              <FlagMark issue={r.epic} />
             </Stack>
             <MuiLink component={Link} to={href(r.epic.key)} underline="hover" color="inherit" sx={{ fontWeight: 500 }}>
               {r.epic.title}
@@ -317,6 +325,7 @@ export default function Timeline() {
             {r.epic.title}
           </MuiLink>
         </Box>
+        <FlagMark issue={r.epic} size={16} />
         {r.children.length > 0 && quiet(`${r.done}/${r.children.length}`)}
       </>
     )
@@ -338,6 +347,7 @@ export default function Timeline() {
                 <MuiLink component={Link} to={href(c.key)} underline="hover" color="text.secondary" noWrap sx={{ fontSize: 13, minWidth: 0 }}>
                   {c.title}
                 </MuiLink>
+                <FlagMark issue={c} size={16} />
               </>,
               span
                 ? bar(c, span, { height: 12, color: theme.palette.grey[500] })

@@ -44,6 +44,7 @@ import { invalidateProjectMeta, useProjectMeta } from '../../workspace/useProjec
 import { emitIssueChange, useIssueChanges } from '../../workspace/issueEvents'
 import { ConfirmDialog, FormDialog, Loading } from '../../components/common'
 import { BacklogRow, type MoveGroup } from '../../components/IssueCard'
+import { useFlagMenu } from '../../components/issue/flagging'
 import { TypeIcon } from '../../components/IssueBits'
 import { useProject } from './projectContext'
 
@@ -205,6 +206,7 @@ export default function Backlog() {
     }
   }
 
+  const flags = useFlagMenu(setError)
   const movesFor = (i: Issue): MoveGroup[] =>
     editable
       ? [
@@ -222,6 +224,7 @@ export default function Backlog() {
               { label: 'Bottom', onSelect: () => move(i, i.sprint_id, 'end') },
             ],
           },
+          flags.group(i),
         ]
       : []
 
@@ -486,6 +489,7 @@ export default function Backlog() {
 
       <ConfirmDialog open={!!deleting} title={`Delete ${deleting?.name}?`} confirmLabel="Delete" destructive busy={busy}
         message="Its issues go back to the backlog." onConfirm={removeSprint} onClose={() => setDeleting(null)} />
+      {flags.dialog}
     </Box>
   )
 }

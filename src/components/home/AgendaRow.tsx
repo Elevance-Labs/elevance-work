@@ -1,5 +1,5 @@
 // One line of Home's agenda. Meetings and releases are tinted in their
-// colour, issues show their type and status, todos a box to tick.
+// colour, issues show their type and status (and a flag), todos a box to tick.
 import { Link } from 'react-router-dom'
 import { Box, ButtonBase, Checkbox, Link as MuiLink, Stack, Tooltip, Typography, alpha } from '@mui/material'
 import EditNoteIcon from '@mui/icons-material/EditNote'
@@ -8,7 +8,8 @@ import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined'
 import { formatDate, formatTime } from '../../lib/constants'
 import type { CalendarItem } from '../../lib/calendar'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
-import { PriorityIcon, StatusLozenge, TypeIcon } from '../IssueBits'
+import { FlagMark, PriorityIcon, StatusLozenge, TypeIcon } from '../IssueBits'
+import { flaggedSx } from '../issue/flagging'
 import { useIssueHref } from '../useIssueHref'
 import type { Entry, TodoRow } from './useAgenda'
 
@@ -53,12 +54,14 @@ export default function AgendaRow({ entry, today, noted, onTick, onOpen }: {
     const overdue = !!i.due_date && i.due_date < today
     return (
       <Stack direction="row" spacing={1.25} component={Link} to={href(i.key)} data-agenda="issue"
-        sx={{ ...row, textDecoration: 'none', color: 'inherit', border: 1, borderColor: 'divider', '&:hover': { bgcolor: 'action.hover' } }}>
+        sx={[{ ...row, textDecoration: 'none', color: 'inherit', border: 1, borderColor: 'divider', '&:hover': { bgcolor: 'action.hover' } },
+          flaggedSx(i)]}>
         <TypeIcon type={typeById(i.type_id)} />
         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
           <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline', minWidth: 0 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', fontWeight: 600 }}>{i.key}</Typography>
             <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>{i.title}</Typography>
+            <FlagMark issue={i} size={16} />
           </Stack>
           <Typography variant="caption" sx={{ color: overdue ? 'error.main' : 'text.secondary' }}>
             {overdue ? `Issue overdue · due ${formatDate(i.due_date, false)}` : 'Issue due'}

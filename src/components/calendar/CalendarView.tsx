@@ -27,6 +27,7 @@ import {
 import EventIcon from '@mui/icons-material/Event'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import FlagIcon from '@mui/icons-material/Flag'
 import { addDays, formatDate, formatTime, todayIso } from '../../lib/constants'
 import {
   ITEM_LABELS,
@@ -96,7 +97,14 @@ function ItemChip({ item, onOpen, continued }: { item: CalendarItem; onOpen: (i:
       ? { color: 'text.primary', borderLeft: `3px solid ${item.color}`, opacity: item.done ? 0.6 : 1 }
       : { bgcolor: item.color, color: '#fff', opacity: item.done ? 0.5 : continued ? 0.75 : 1 }),
   } as const
-  return <ItemButton item={item} onOpen={onOpen} sx={sx}>{label}</ItemButton>
+  // A flagged issue: a flag before its title, the reason on hover.
+  const flag = item.issue?.flag_reason
+  return (
+    <ItemButton item={item} onOpen={onOpen} sx={sx} tooltip={flag ? `${ITEM_LABELS[item.kind]}: ${item.title} · Flagged: ${flag}` : undefined}>
+      {flag && <FlagIcon data-flagged aria-label="Flagged" aria-hidden={false} sx={{ fontSize: 13, verticalAlign: '-2px', mr: 0.25 }} />}
+      {label}
+    </ItemButton>
+  )
 }
 
 // One hour on the week and day timelines.

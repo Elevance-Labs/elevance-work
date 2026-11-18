@@ -11,7 +11,7 @@ import { must } from './useWidgetQuery'
 /** What the widgets read about an issue (no description, custom values or labels). */
 export const INSIGHT_COLUMNS =
   'id, project_id, number, key, type_id, status_id, title, priority, assignee_id, parent_id, sprint_id, release_id, ' +
-  'story_points, start_date, due_date, resolved_at, created_at'
+  'story_points, start_date, due_date, resolved_at, created_at, flag_reason'
 
 /** The rows widgets read: Issue's shape, minus what INSIGHT_COLUMNS leaves out. */
 export const asIssues = (rows: unknown) => (rows ?? []) as Issue[]

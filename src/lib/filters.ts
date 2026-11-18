@@ -26,6 +26,8 @@ export interface IssueFilter {
   created: '' | '7d' | '30d' | '90d'
   updated: '' | '7d' | '30d'
   due: '' | 'overdue' | 'week'
+  // Flagged ('yes') or not ('no'); '' either.
+  flagged: '' | 'yes' | 'no'
   sort: SortKey
 }
 
@@ -45,13 +47,14 @@ export const EMPTY_FILTER: IssueFilter = {
   created: '',
   updated: '',
   due: '',
+  flagged: '',
   sort: 'updated',
 }
 
 const LIST_KEYS = [
   'projects', 'types', 'statuses', 'categories', 'assignees', 'reporters', 'priorities', 'sprints', 'releases', 'labels',
 ] as const
-const TEXT_KEYS = ['text', 'resolution', 'created', 'updated', 'due', 'sort'] as const
+const TEXT_KEYS = ['text', 'resolution', 'created', 'updated', 'due', 'flagged', 'sort'] as const
 
 export const SORT_LABELS: Record<SortKey, string> = {
   updated: 'Recently updated',
@@ -207,6 +210,8 @@ export function applyFilter<Q extends FilterableQuery<Q>>(query: Q, filter: Issu
   if (updated) q = q.gte('updated_at', updated)
   if (filter.due === 'overdue') q = q.lt('due_date', today).is('resolved_at', null)
   if (filter.due === 'week') q = q.gte('due_date', today).lte('due_date', addDays(today, 7))
+  if (filter.flagged === 'yes') q = q.not('flag_reason', 'is', null)
+  if (filter.flagged === 'no') q = q.is('flag_reason', null)
 
   switch (filter.sort) {
     case 'created':
@@ -243,6 +248,8 @@ export function matchesFilter(issue: Issue, filter: IssueFilter, ctx: FilterCont
   if (filter.resolution === 'resolved' && !issue.resolved_at) return false
   if (filter.due === 'overdue' && !(issue.due_date && issue.due_date < today && !issue.resolved_at)) return false
   if (filter.due === 'week' && !(issue.due_date && issue.due_date >= today && issue.due_date <= addDays(today, 7))) return false
+  if (filter.flagged === 'yes' && !issue.flag_reason) return false
+  if (filter.flagged === 'no' && issue.flag_reason) return false
   return true
 }
 

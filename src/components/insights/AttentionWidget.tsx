@@ -1,5 +1,5 @@
 // Open work someone should look at today, worst first, each with why:
-// blocked, overdue, in progress for longer than the team usually takes, or
+// flagged, blocked, overdue, in progress for longer than the team usually takes, or
 // in the sprint or next release with nobody on it or no estimate.
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -21,7 +21,7 @@ import { must, useWidgetQuery } from './useWidgetQuery'
 
 const SHOWN = 6
 const COLOR: Record<AttentionKind, 'error' | 'warning' | 'default'> = {
-  blocked: 'error', overdue: 'error', aging: 'warning', unassigned: 'default', unestimated: 'default',
+  flagged: 'error', blocked: 'error', overdue: 'error', aging: 'warning', unassigned: 'default', unestimated: 'default',
 }
 
 export default function AttentionWidget({ project, header }: WidgetProps) {
@@ -72,7 +72,7 @@ export default function AttentionWidget({ project, header }: WidgetProps) {
     <>
       {header(list.length > 0 && <Chip size="small" label={list.length} color={list.some((a) => COLOR[a.reasons[0].kind] === 'error') ? 'error' : 'default'} />)}
       {!list.length ? (
-        <Quiet>Nothing needs attention: nothing blocked, overdue or stuck.</Quiet>
+        <Quiet>Nothing needs attention: nothing flagged, blocked, overdue or stuck.</Quiet>
       ) : (
         <Stack spacing={1}>
           {shown.map(({ issue, reasons }) => (
@@ -85,7 +85,8 @@ export default function AttentionWidget({ project, header }: WidgetProps) {
                 <PriorityIcon priority={issue.priority} size={18} />
               </Stack>
               <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap', rowGap: 0.5 }}>
-                {reasons.map((r) => <Chip key={r.kind} size="small" variant="outlined" color={COLOR[r.kind]} label={r.text} data-reason={r.kind} />)}
+                {reasons.map((r) => <Chip key={r.kind} size="small" variant="outlined" color={COLOR[r.kind]} label={r.text} data-reason={r.kind}
+                  title={r.text} sx={{ maxWidth: '100%' }} />)}
               </Stack>
             </Box>
           ))}

@@ -549,17 +549,18 @@ export function epicHealth(row: TimelineRow, statuses: ProjectStatus[], today: s
 // Needs attention
 // ---------------------------------------------------------------------------
 
-export type AttentionKind = 'blocked' | 'overdue' | 'aging' | 'unassigned' | 'unestimated'
+export type AttentionKind = 'flagged' | 'blocked' | 'overdue' | 'aging' | 'unassigned' | 'unestimated'
 
 export interface Attention {
   issue: Issue
   reasons: { kind: AttentionKind; text: string }[]
 }
 
-const WEIGHT: Record<AttentionKind, number> = { blocked: 3, overdue: 3, aging: 2, unassigned: 1, unestimated: 1 }
+const WEIGHT: Record<AttentionKind, number> = { flagged: 3, blocked: 3, overdue: 3, aging: 2, unassigned: 1, unestimated: 1 }
 
 /**
  * Open work someone should look at, worst first:
+ * - flagged by someone, with their reason;
  * - blocked by an issue that is still open;
  * - past its due date;
  * - in progress for longer than `agingDays` (see agingThreshold);
@@ -585,6 +586,7 @@ export function needsAttention(input: {
   const out: Attention[] = []
   for (const issue of input.open) {
     const reasons: Attention['reasons'] = []
+    if (issue.flag_reason) reasons.push({ kind: 'flagged', text: `Flagged: ${issue.flag_reason}` })
     const blockedBy = input.blockers.get(issue.id) ?? []
     if (blockedBy.length) reasons.push({ kind: 'blocked', text: `Blocked by ${blockedBy.join(', ')}` })
     if (issue.due_date && issue.due_date < input.today) {

@@ -13,7 +13,8 @@ behaviour).
 - In-house **work tracker** for Elevance Labs (replaces Jira Software free tier).
   Sibling of `el-support` and `el-people`; same stack and conventions.
 - Modules: **projects** (Scrum / Kanban), **issues** (types by level, custom
-  fields, links, watchers, history), **board**, **backlog** and **sprints**,
+  fields, links, watchers, history, flags: held up, with a reason, tinted
+  everywhere listed), **board**, **backlog** and **sprints**,
   **timeline** (epics), **releases** (rich-text notes on top, approvers
   who approve or reject, locked once approved; the Summary's outlook beside), **summary** (project intelligence: widgets a
   project's admins choose, incl. the classic reports; no Reports tab), **docs** (Google Drive),
@@ -57,8 +58,11 @@ behaviour).
   `can_view_issue` / `can_edit_issue`. Never inline a new rule in a policy.
 - **Business rules live in triggers.** `issues_guard` numbers issues, fills
   defaults, enforces the hierarchy, sprint, release and assignee rules, checks
-  custom values (`issue_custom_clean`) and stamps `resolved_at`.
-  `issues_after_write` writes history, watchers, notifications and Chat calls.
+  custom values (`issue_custom_clean`), stamps `resolved_at` and a flag's
+  who / when (a flag always has a reason).
+  `issues_after_write` writes history, watchers, notifications and Chat calls,
+  and posts a flag's change as a comment by the actor (whose own trigger
+  notifies).
   A save's notifications go through `notify_people`: one statement (one
   `push-send` call per save), one per person (assigned > mentioned > status
   changed > commented; the save's new status in `detail`), as in Support.
@@ -159,7 +163,7 @@ behaviour).
 | `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/home/` | Home's parts: `useAgenda` (meetings, releases, issues and todos due, overdue, noted meetings, ticking), `AgendaRow`, `NowPanel` / `NowCard` (the meeting now, wide / phone), `PhoneHome` (date line, meeting card with its note in a sheet, seven-day strip `?date=`, the day's agenda). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
-| `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
+| `src/components/issue/` | `Flag` (the reason dialog, the flag button beside the issue's title: lit when flagged, opens why, edit, remove) and `flagging` (saving a flag, a card menu's Flag group, `flaggedSx`: the tint every list gives a flagged issue; `FlagMark` in `IssueBits` is its icon). The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
 | `src/components/releases/` | The release page's parts: `ReleaseNotesCard` (the notes on top: view, write with a draft from done issues, copy, Google Doc), `ApprovalPanel` (approvers, approve / reject, ask again). |
 | `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `useReleaseHealth` / `ReleaseOutlook` (one release's judgement, shared by the release widget and the release page), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
@@ -308,6 +312,7 @@ Full detail in `supabase/schema.sql`.
   (pending / approved / rejected, with a comment); managers add and remove
   (not once decided), decisions only via RPC.
 - `issues` — the issue; `key`, `rank`, `custom`, `search` (tsvector);
+  `flag_reason` (null: not flagged; `flagged_by` / `flagged_at` stamped);
   `issue_events` — field-by-field history (names copied in);
   `issue_links`, `issue_watchers`, `comments`, `attachments` (a file added
   with a comment names it, on the same issue; kept if the comment goes),

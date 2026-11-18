@@ -5,7 +5,8 @@ import type { Issue, IssueLevel, IssuePriority, IssueType, ProjectStatus, Status
 // the issue view (ISSUE_DETAIL_COLUMNS), since it can be large.
 export const ISSUE_COLUMNS =
   'id, project_id, number, key, type_id, status_id, title, priority, assignee_id, reporter_id, parent_id, ' +
-  'sprint_id, release_id, story_points, start_date, due_date, labels, rank, custom, resolved_at, created_at, updated_at'
+  'sprint_id, release_id, story_points, start_date, due_date, labels, rank, custom, resolved_at, created_at, updated_at, ' +
+  'flag_reason, flagged_by, flagged_at'
 export const ISSUE_DETAIL_COLUMNS = `${ISSUE_COLUMNS}, description, created_by`
 
 // The columns a client may write (the grant lists in the schema).
@@ -27,6 +28,7 @@ export type IssueWrite = Partial<
     | 'labels'
     | 'rank'
     | 'custom'
+    | 'flag_reason'
   > & { description: string }
 >
 
@@ -109,6 +111,15 @@ export const HISTORY_FIELD_LABELS: Record<string, string> = {
   due_date: 'Due date',
   labels: 'Labels',
   description: 'Description',
+  flag: 'Flag',
+}
+
+/** Is the issue flagged (held up, with a reason)? */
+export const isFlagged = (issue: Pick<Issue, 'flag_reason'>) => !!issue.flag_reason
+
+/** A flag's change in words: flagged, the reason changed, or the flag removed. */
+export function flagChange(from: string | null, to: string | null) {
+  return !to ? 'removed the flag' : !from ? 'flagged the issue' : 'changed the flag'
 }
 
 /** One side of a change, as shown: "None" for nothing, priorities and dates in words. */
@@ -124,6 +135,7 @@ export function activityLine(a: { kind: 'change' | 'comment'; field: string | nu
   if (a.kind === 'comment') return 'commented'
   if (a.field === 'created') return 'created the issue'
   if (a.field === 'description') return 'updated the description'
+  if (a.field === 'flag') return a.to_value ? 'flagged the issue' : 'removed the flag'
   const field = a.field ?? ''
   const label = HISTORY_FIELD_LABELS[field] ?? field
   return a.to_value === null || a.to_value === '' ? `cleared ${label}` : `set ${label} to ${historyValue(field, a.to_value)}`

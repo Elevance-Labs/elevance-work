@@ -11,7 +11,8 @@ import { formatDate, todayIso } from '../lib/constants'
 import type { Issue } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { PersonAvatar } from './common'
-import { Labels, Points, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
+import { FlagMark, Labels, Points, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
+import { flaggedSx } from './issue/flagging'
 import { useIssueHref } from './useIssueHref'
 
 export interface MoveOption {
@@ -79,13 +80,17 @@ export function BoardCard({ issue, moves, draggable = true, overlay }: { issue: 
       {...d.handle}
       variant="outlined"
       data-issue={issue.key}
-      sx={{
-        p: 1.25,
-        cursor: draggable ? 'grab' : 'pointer',
-        touchAction: 'manipulation',
-        boxShadow: overlay ? 6 : 0,
-        '&:hover': { borderColor: 'primary.light' },
-      }}
+      sx={[
+        {
+          p: 1.25,
+          cursor: draggable ? 'grab' : 'pointer',
+          touchAction: 'manipulation',
+          boxShadow: overlay ? 6 : 0,
+          '&:hover': { borderColor: 'primary.light' },
+        },
+        flaggedSx(issue),
+        !!issue.flag_reason && { borderColor: 'warning.main' },
+      ]}
     >
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'flex-start' }}>
         <Typography
@@ -109,6 +114,7 @@ export function BoardCard({ issue, moves, draggable = true, overlay }: { issue: 
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, flexGrow: 1 }} noWrap>
           {issue.key}
         </Typography>
+        <FlagMark issue={issue} size={16} />
         <Points value={issue.story_points} />
         <PriorityIcon priority={issue.priority} size={18} />
         <PersonAvatar person={profileById(issue.assignee_id)} size={22} tooltip />
@@ -139,20 +145,23 @@ export function BacklogRow({
       style={overlay ? undefined : d.style}
       {...d.handle}
       data-issue={issue.key}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1.5,
-        py: 0.75,
-        bgcolor: 'background.paper',
-        borderBottom: 1,
-        borderColor: 'divider',
-        cursor: draggable ? 'grab' : 'default',
-        touchAction: 'manipulation',
-        boxShadow: overlay ? 6 : 0,
-        '&:hover': { bgcolor: 'action.hover' },
-      }}
+      sx={[
+        {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.5,
+          py: 0.75,
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+          cursor: draggable ? 'grab' : 'default',
+          touchAction: 'manipulation',
+          boxShadow: overlay ? 6 : 0,
+          '&:hover': { bgcolor: 'action.hover' },
+        },
+        flaggedSx(issue),
+      ]}
     >
       <TypeIcon type={typeById(issue.type_id)} />
       <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap' }}>{issue.key}</Typography>
@@ -160,6 +169,7 @@ export function BacklogRow({
         '&:hover': { textDecoration: 'underline' } }}>
         {issue.title}
       </Typography>
+      <FlagMark issue={issue} />
       {extra}
       <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1 }}>
         <Labels labels={issue.labels} max={1} />

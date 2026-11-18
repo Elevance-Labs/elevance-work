@@ -7,7 +7,7 @@ import { PRIORITIES, PRIORITY_LABELS } from '../lib/constants'
 import type { Issue, IssuePriority, IssueType, Profile, ProjectStatus } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
 import { PersonAvatar } from './common'
-import { PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
+import { FlagMark, PriorityIcon, StatusLozenge, TypeIcon } from './IssueBits'
 
 export function PersonPicker({
   label,
@@ -261,7 +261,8 @@ export function IssuePicker({
         <Box component="li" key={key} {...props} sx={{ gap: 1 }}>
           <TypeIcon type={typeById(i.type_id)} />
           <Typography variant="body2" sx={{ color: 'text.secondary', flexShrink: 0 }}>{i.key}</Typography>
-          <Typography variant="body2" noWrap>{i.title}</Typography>
+          <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>{i.title}</Typography>
+          <FlagMark issue={i} size={16} />
         </Box>
       )}
       renderInput={(params) => <TextField {...params} label={label} autoFocus={autoFocus} />}

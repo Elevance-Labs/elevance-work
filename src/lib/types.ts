@@ -173,6 +173,10 @@ export interface Issue {
   resolved_at: string | null
   created_at: string
   updated_at: string
+  // Flagged: held up, and why (null: not flagged). Who and when are stamped.
+  flag_reason: string | null
+  flagged_by: string | null
+  flagged_at: string | null
 }
 
 export interface IssueDetail extends Issue {

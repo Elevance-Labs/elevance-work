@@ -166,7 +166,7 @@ function CommentItem({
   }
 
   return (
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+    <Stack direction="row" spacing={1.5} data-comment={comment.id} sx={{ alignItems: 'flex-start' }}>
       <PersonAvatar person={author} size={32} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>

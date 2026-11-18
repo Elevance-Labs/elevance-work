@@ -1,7 +1,9 @@
 // The small pieces every issue list draws: type and priority icons, the
-// status lozenge, the key, labels and points.
+// status lozenge, the key, labels and points; a flagged issue's mark (its
+// tint is flaggedSx, in ./issue/flagging).
 import { Link } from 'react-router-dom'
 import { Box, Chip, Stack, Tooltip, Typography, type SxProps, type Theme } from '@mui/material'
+import FlagIcon from '@mui/icons-material/Flag'
 import BoltIcon from '@mui/icons-material/Bolt'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BugReportIcon from '@mui/icons-material/BugReport'
@@ -16,7 +18,7 @@ import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRig
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import StarIcon from '@mui/icons-material/Star'
 import { CATEGORY_LABELS, PRIORITY_HEX, PRIORITY_LABELS, formatPoints } from '../lib/constants'
-import type { IssueIcon, IssuePriority, IssueType, ProjectStatus } from '../lib/types'
+import type { Issue, IssueIcon, IssuePriority, IssueType, ProjectStatus } from '../lib/types'
 import { useIssueHref } from './useIssueHref'
 
 const ICONS: Record<IssueIcon, typeof BoltIcon> = {
@@ -174,5 +176,16 @@ export function ProjectAvatar({ project, size = 24 }: { project: { key: string; 
     >
       {project.key.slice(0, 2)}
     </Box>
+  )
+}
+
+/** A flagged issue's mark: a red flag, its reason on hover. Nothing when not flagged. */
+export function FlagMark({ issue, size = 18 }: { issue: Pick<Issue, 'flag_reason'>; size?: number }) {
+  if (!issue.flag_reason) return null
+  return (
+    <Tooltip title={`Flagged: ${issue.flag_reason}`}>
+      <FlagIcon data-flagged aria-label={`Flagged: ${issue.flag_reason}`} aria-hidden={false}
+        sx={{ fontSize: size, color: 'error.main', flexShrink: 0 }} />
+    </Tooltip>
   )
 }

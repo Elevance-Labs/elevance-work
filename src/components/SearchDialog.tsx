@@ -28,7 +28,7 @@ import { noteColor, noteHeading } from '../lib/notes'
 import { SEARCH_LIMIT, searchNotes, searchTodos } from '../lib/search'
 import type { Issue, Note, Todo } from '../lib/types'
 import { useWorkspace } from '../workspace/WorkspaceProvider'
-import { StatusLozenge, TypeIcon } from './IssueBits'
+import { FlagMark, StatusLozenge, TypeIcon } from './IssueBits'
 import { useIssueHref } from './useIssueHref'
 
 type Group = 'Issues' | 'Todos' | 'Notes' | ''
@@ -106,7 +106,7 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
       out.push({
         id: `issue:${i.id}`, group: 'Issues', icon: <TypeIcon type={typeById(i.type_id)} />,
         primary: i.title, secondary: `${i.key} · ${projectById(i.project_id)?.name ?? ''}`,
-        aside: <StatusLozenge status={statusById(i.status_id)} />, go: go(issueHref(i.key)),
+        aside: <><FlagMark issue={i} size={16} /><StatusLozenge status={statusById(i.status_id)} /></>, go: go(issueHref(i.key)),
       })
     }
     if (local) {
