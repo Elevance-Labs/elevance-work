@@ -18,7 +18,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Alert, Avatar, AvatarGroup, Box, Button, ButtonBase, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography, alpha } from '@mui/material'
+import { Alert, Box, Button, ButtonBase, Chip, MenuItem, Paper, Stack, TextField, Tooltip, Typography, alpha } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import { useMe } from '../../auth/AuthProvider'
 import { supabase } from '../../lib/supabase'
@@ -30,8 +30,9 @@ import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { useProjectMeta } from '../../workspace/useProjectMeta'
 import { useIssueChanges } from '../../workspace/issueEvents'
 import { useLayout } from '../../components/layoutContext'
-import { EmptyState, Loading, PersonAvatar } from '../../components/common'
+import { EmptyState, Loading } from '../../components/common'
 import { BoardCard, type MoveGroup } from '../../components/IssueCard'
+import AssigneeFilter from '../../components/AssigneeFilter'
 import { useFlagMenu } from '../../components/issue/flagging'
 import { useProject } from './projectContext'
 
@@ -288,21 +289,7 @@ export default function Board() {
       <Stack direction="row" spacing={1.5} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <TextField placeholder="Filter this board" value={text} onChange={(e) => setText(e.target.value)}
           slotProps={{ htmlInput: { 'aria-label': 'Filter this board' } }} sx={{ width: { xs: '100%', sm: 200 }, bgcolor: 'background.paper' }} />
-        <AvatarGroup max={8} sx={{ '& .MuiAvatar-root': { width: 30, height: 30, border: 2, borderColor: 'background.default' } }}>
-          {assignees.map((id) => {
-            const p = id === 'none' ? null : profileById(id)
-            const on = people.includes(id)
-            return (
-              <Tooltip key={id} title={p?.full_name ?? 'Unassigned'}>
-                <Avatar component="button" aria-pressed={on} aria-label={`Only ${p?.full_name ?? 'unassigned'}`}
-                  onClick={() => setPeople((ps) => (on ? ps.filter((x) => x !== id) : [...ps, id]))}
-                  sx={{ p: 0, cursor: 'pointer', outline: on ? 2 : 0, outlineColor: 'primary.main', bgcolor: 'transparent' }}>
-                  <PersonAvatar person={p} size={30} />
-                </Avatar>
-              </Tooltip>
-            )
-          })}
-        </AvatarGroup>
+        <AssigneeFilter assignees={assignees} value={people} onChange={setPeople} />
         <Chip label="Only my issues" clickable color={onlyMine ? 'primary' : 'default'} variant={onlyMine ? 'filled' : 'outlined'}
           onClick={() => setOnlyMine((v) => !v)} />
         {(onlyFlagged || issues.some((i) => i.flag_reason)) && (

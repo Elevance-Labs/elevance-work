@@ -136,6 +136,148 @@ await click(menuItem('Delete sprint'))
 await click(button('Delete', dialog()!))
 check('a planned sprint can be deleted', captured.deletes.some((d) => d.table === 'sprints' && JSON.stringify(d.filters) === `[["id","eq","${third}"]]`))
 
+// ---------------- the backlog's quick filters and epics ----------------
+reset()
+table('issues').find((i) => i.key === 'WEB-6')!.updated_at = `${TODAY}T09:00:00Z`
+signInAs(PEOPLE.member)
+await mountApp('/projects/WEB/backlog')
+const lists = () => [...document.querySelectorAll('[data-list]')].map((l) => l.textContent).join(' ')
+const panel = () => document.querySelector('aside[aria-label="Epics"]')
+const menuItemWith = (words: string) =>
+  [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((m) => m.textContent?.includes(words))
+
+check('a row shows its epic', !!list('WEB Sprint 1')?.querySelector('[data-issue="WEB-2"]')?.textContent?.includes('Launch the new site'))
+await click(button('Only my issues'))
+check('“Only my issues” keeps yours in every list', lists().includes('Hero banner') && lists().includes('Pricing page') &&
+  !lists().includes('Contact form'))
+await click(button('Only my issues'))
+await click(button('Recently updated'))
+check('“Recently updated” keeps what changed in the last day', lists().includes('Contact form') && !lists().includes('Pricing page'))
+await click(button('Clear filters'))
+check('“Clear filters” shows everything again', lists().includes('Pricing page') && lists().includes('Contact form'))
+await click(button('Only Sara Iqbal'))
+check('an assignee’s avatar keeps their issues', lists().includes('Pricing page') && !lists().includes('Contact form'))
+await click(button('Clear filters'))
+
+check('the Epics panel starts closed', !panel())
+await click(button('Epics'))
+check('“Epics” opens the panel with each epic and its progress', !!panel()?.textContent?.includes('Launch the new site') &&
+  !!panel()?.textContent?.includes('0 of 1 done'), panel()?.textContent ?? '')
+check('…remembered in this browser', window.localStorage.getItem('elevance.work.backlog-epics') === '1')
+await click(button('Epic Launch the new site'))
+check('an epic in the panel filters the lists to its issues', lists().includes('Hero banner') && !lists().includes('Pricing page'))
+check('…and says so beside the filters', text().includes('Epic: Launch the new site'))
+await click(button('Issues without epic'))
+check('“Issues without epic” keeps the rest', !lists().includes('Hero banner') && lists().includes('Pricing page'))
+await click(button('All issues'))
+check('“All issues” lifts the epic filter', lists().includes('Hero banner') && lists().includes('Pricing page'))
+
+await click(button('Move WEB-5'))
+await click(menuItem('Add to epic…'))
+await click(menuItemWith('Launch the new site'))
+check('a row’s menu puts it under an epic', lastUpdate('issues')?.values.parent_id === 'i-web-1' &&
+  JSON.stringify(lastUpdate('issues')?.filters) === '[["id","eq","i-web-5"]]', JSON.stringify(lastUpdate('issues')))
+check('…and the row shows it', !!list('Backlog')?.querySelector('[data-issue="WEB-5"]')?.textContent?.includes('Launch the new site'))
+check('…and the panel counts it', !!panel()?.textContent?.includes('0 of 2 done'), panel()?.textContent ?? '')
+
+const openEpic = panel()?.querySelector<HTMLAnchorElement>('a[aria-label="Open WEB-1"]')
+check('each epic in the panel has an icon that opens it', !!openEpic && openEpic.getAttribute('href')?.includes('issue=WEB-1') === true,
+  openEpic?.getAttribute('href') ?? 'none')
+check('…beside its filter button, not inside it', !openEpic?.closest('button'))
+await click(button('Epic Launch the new site: change', list('Backlog')!))
+const openFromMenu = menuItem('Open WEB-1')
+check('a row’s epic menu opens the epic too', openFromMenu?.getAttribute('href')?.includes('issue=WEB-1') === true,
+  openFromMenu?.getAttribute('href') ?? 'none')
+await click(menuItem('Remove from epic'))
+check('the epic chip takes it out again', lastUpdate('issues')?.values.parent_id === null, JSON.stringify(lastUpdate('issues')))
+check('…and the chip goes', !list('Backlog')?.querySelector('[data-issue="WEB-5"]')?.textContent?.includes('Launch the new site'))
+
+failNext('issues.update', { code: '23514', message: 'Only an epic can be the parent of this issue.' })
+await click(button('Move WEB-6'))
+await click(menuItem('Add to epic…'))
+await click(menuItemWith('Launch the new site'))
+check('a refused epic goes back, and says why', text().includes('Only an epic can be the parent of this issue.') &&
+  !list('Backlog')?.querySelector('[data-issue="WEB-6"]')?.textContent?.includes('Launch the new site'))
+
+await click(button('Create epic'))
+await typeInto('New epic name', 'Checkout')
+await submit(labelled('New epic name'))
+const newEpic = captured.inserts.filter((i) => i.table === 'issues').at(-1)?.rows[0]
+check('“Create epic” adds an epic to the project', newEpic?.title === 'Checkout' && newEpic.type_id === 't-epic' &&
+  newEpic.project_id === 'pr-web' && !newEpic.sprint_id, JSON.stringify(newEpic))
+check('…listed in the panel, not planned', !!panel()?.textContent?.includes('Checkout') && !lists().includes('Checkout'))
+
+await click(button('Close the epics panel'))
+check('the panel closes', !panel() && window.localStorage.getItem('elevance.work.backlog-epics') === '0')
+
+const press = async (key: string, target: Element = document.body, extra: KeyboardEventInit = {}) => {
+  target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }))
+  await waitFor(() => true)
+}
+await press('e')
+check('E opens the epics panel', await waitFor(() => !!panel()))
+await press('e')
+check('…and E again closes it', await waitFor(() => !panel()))
+await press('e', labelled('Search the backlog')!)
+await press('e', document.body, { metaKey: true })
+check('…but not while typing, nor with Cmd', !panel())
+
+// ---------------- selecting issues and moving them together ----------------
+reset()
+signInAs(PEOPLE.member)
+await mountApp('/projects/WEB/backlog')
+const row = (key: string) => document.querySelector<HTMLElement>(`[data-list] [data-issue="${key}"]`)
+const clickRow = async (key: string, extra: MouseEventInit = {}) => {
+  row(key)!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, ...extra }))
+  await waitFor(() => true)
+}
+const bar = () => document.querySelector('[role="toolbar"][aria-label="Selected issues"]')
+const updatesSince = (n: number) => captured.updates.filter((u) => u.table === 'issues').slice(n)
+
+check('nothing is selected at first', !bar())
+await clickRow('WEB-5')
+check('a click on a row selects it', row('WEB-5')?.getAttribute('aria-selected') === 'true' && !!bar()?.textContent?.includes('1 issue selected'))
+await clickRow('WEB-6', { ctrlKey: true })
+check('Cmd/Ctrl-click adds another', !!bar()?.textContent?.includes('2 issues selected') && !!bar()?.textContent?.includes('4 points'),
+  bar()?.textContent ?? '')
+await clickRow('WEB-2')
+check('a plain click selects only that one', !!bar()?.textContent?.includes('1 issue selected') && row('WEB-5')?.getAttribute('aria-selected') === 'false')
+await clickRow('WEB-2')
+check('…and clicking it again lets it go', !bar())
+
+await click(labelled('Select WEB-5'))
+await click(labelled('Select WEB-6'))
+check('each row’s checkbox adds it', !!bar()?.textContent?.includes('2 issues selected'))
+let n0 = captured.updates.filter((u) => u.table === 'issues').length
+await click(button('Move to', bar()!))
+await click(menuItem('WEB Sprint 2'))
+const moved = updatesSince(n0)
+check('the bar moves them all into a sprint', moved.length === 2 && moved.every((u) => u.values.sprint_id === 'sp-2') &&
+  JSON.stringify(moved.map((u) => u.filters[0][2])) === '["i-web-5","i-web-6"]', JSON.stringify(moved))
+check('…keeping their order', (moved[0].values.rank as number) < (moved[1].values.rank as number))
+check('…and they show there, still selected', !!list('WEB Sprint 2')?.textContent?.includes('Pricing page') &&
+  !!list('WEB Sprint 2')?.textContent?.includes('Contact form') && !!bar()?.textContent?.includes('2 issues selected'))
+
+n0 = captured.updates.filter((u) => u.table === 'issues').length
+await click(button('Move WEB-6'))
+check('a selected row’s menu speaks for the selection', !!menuItem('Backlog') &&
+  [...document.querySelectorAll('[role="menu"] li')].some((li) => li.textContent === 'Move 2 issues to'))
+await click(menuItem('Backlog'))
+check('…and moves them all', updatesSince(n0).length === 2 && updatesSince(n0).every((u) => u.values.sprint_id === null) &&
+  !!list('Backlog')?.textContent?.includes('Pricing page') && !!list('Backlog')?.textContent?.includes('Contact form'))
+
+n0 = captured.updates.filter((u) => u.table === 'issues').length
+await click(button('Epic', bar()!))
+await click(menuItemWith('Launch the new site'))
+check('the bar puts them all under an epic', updatesSince(n0).length === 2 && updatesSince(n0).every((u) => u.values.parent_id === 'i-web-1'))
+
+await clickRow('WEB-5', { shiftKey: true })
+document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+check('Esc clears the selection', await waitFor(() => !bar()))
+await click(labelled('Select WEB-5'))
+await click(button('Clear the selection'))
+check('…as does the bar’s close button', !bar())
+
 // ---------------- what a viewer can't do ----------------
 reset()
 signInAs(PEOPLE.viewer)
@@ -143,5 +285,10 @@ await mountApp('/projects/WEB/backlog')
 check('a viewer sees the backlog', !!list('Backlog'))
 check('…with no planning controls', !button('Create sprint') && !button('Complete sprint') && !button('Create issue') &&
   !document.querySelector('[aria-label^="Move WEB-"]'))
+await click(button('Epics'))
+check('…and selects nothing', !document.querySelector('[aria-label^="Select WEB-"]') && !row('WEB-5')?.hasAttribute('aria-selected'))
+check('…a row’s epic chip opens the epic', list('WEB Sprint 1')?.querySelector('[data-issue="WEB-2"] a[href*="issue=WEB-1"]')?.textContent === 'Launch the new site')
+check('…epics shown but not changed', !!list('WEB Sprint 1')?.textContent?.includes('Launch the new site') &&
+  !document.querySelector('[aria-label$=": change"]') && !button('Create epic') && !!document.querySelector('aside[aria-label="Epics"]'))
 
 done()

@@ -14,7 +14,7 @@ behaviour).
   Sibling of `el-support` and `el-people`; same stack and conventions.
 - Modules: **projects** (Scrum / Kanban), **issues** (types by level, custom
   fields, links, watchers, history, flags: held up, with a reason, tinted
-  everywhere listed), **board**, **backlog** and **sprints**,
+  everywhere listed), **board**, **backlog** (quick filters; an Epics panel, E; rows selected and moved together) and **sprints**,
   **timeline** (epics), **releases** (rich-text notes on top, approvers
   who approve or reject, locked once approved; the Summary's outlook beside), **summary** (project intelligence: widgets a
   project's admins choose, incl. the classic reports; no Reports tab), **docs** (Google Drive),
@@ -160,11 +160,12 @@ behaviour).
 | `src/pages/home/` | Dashboard (Home: wide panels, or `PhoneHome` below `md`), Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Docs, Settings (incl. Features); a tab whose feature is off is hidden. `NotesRedirect` (old `/notes` links). |
 | `src/pages/admin/` | `AdminLayout` (tabs) over People, issue types, workspace settings (workspace admins). |
-| `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
+| `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `AssigneeFilter` (the avatar quick filter, board and backlog), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/home/` | Home's parts: `useAgenda` (meetings, releases, issues and todos due, overdue, noted meetings, ticking), `AgendaRow`, `NowPanel` / `NowCard` (the meeting now, wide / phone), `PhoneHome` (date line, meeting card with its note in a sheet, seven-day strip `?date=`, the day's agenda). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | `Flag` (the reason dialog, the flag button beside the issue's title: lit when flagged, opens why, edit, remove) and `flagging` (saving a flag, a card menu's Flag group, `flaggedSx`: the tint every list gives a flagged issue; `FlagMark` in `IssueBits` is its icon). The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
+| `src/components/backlog/` | `Epics`: the backlog's Epics panel (filter by epic, open one, drop rows to move them there, create an epic), a row's epic chip, the menu that sets or removes it (one issue or a selection). |
 | `src/components/releases/` | The release page's parts: `ReleaseNotesCard` (the notes on top: view, write with a draft from done issues, copy, Google Doc), `ApprovalPanel` (approvers, approve / reject, ask again). |
 | `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `useReleaseHealth` / `ReleaseOutlook` (one release's judgement, shared by the release widget and the release page), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to pinned ones or not: the notes page, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
@@ -258,6 +259,9 @@ behaviour).
   `release_cleared` / `release_approved`).
 - `drafts.ts` — unsaved text kept in the browser per person (an issue's
   description until saved or cancelled).
+- `backlog.ts` — the backlog's quick filters (`matchesBacklog`, `NO_EPIC`),
+  an epic's progress, the Epics panel's drop ids, selecting rows
+  (`nextSelection`) and ranks for moving several together (`blockRanks`).
 - `timeline.ts` — the epic timeline: rows (an epic's own dates, or borrowed
   from its issues), the window of months drawn, placing a bar, dragging one.
 - `devLinks.ts` — ordering an issue's GitHub links.
@@ -270,7 +274,8 @@ behaviour).
 - `richText.ts` — DOMPurify allow-list (mention spans, tables), mention ids, styles.
 - `projects.ts` — project key format and suggestion.
 - `search.ts` — search matching and order (todos, notes; a few per group),
-  the Cmd/Ctrl shortcut test and label.
+  the Cmd/Ctrl shortcut test and label, a page's one-letter shortcut
+  (`isPlainKey`: not while typing or in a dialog or menu).
 - `notifications.ts` — what a notification says (`notificationSentence`, a
   comment's `excerpt`), unread and badge counts. Wording mirrored in
   `push-send/message.ts`.

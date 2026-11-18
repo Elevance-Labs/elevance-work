@@ -49,3 +49,18 @@ export const shortcutLabel = (key: string) => (isMac() ? `⌘${key.toUpperCase()
 /** Is this keydown Cmd/Ctrl + key (and nothing else but Shift-free)? */
 export const isShortcut = (e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, key: string) =>
   (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === key
+
+/**
+ * Is this keydown the bare key (a page's one-letter shortcut, as Jira's E for
+ * the epics panel)? Not with a modifier, not held down, and not while typing
+ * or inside a dialog or menu, where the letter belongs to what has focus.
+ */
+export function isPlainKey(
+  e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'repeat'> & { target: EventTarget | null },
+  key: string,
+) {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.key.toLowerCase() !== key) return false
+  const el = e.target as { closest?: (s: string) => unknown; isContentEditable?: boolean } | null
+  if (!el?.closest) return true
+  return !el.isContentEditable && !el.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [role="listbox"]')
+}

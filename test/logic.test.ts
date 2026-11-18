@@ -19,9 +19,10 @@ const { sanitizeHtml, mentionedIds, isBlankHtml } = await import('../src/lib/ric
 const { releaseNotes, notesText, releaseCountdown, draftNotesHtml, htmlToPlainText, releaseApproval, approvalLabel } = await import('../src/lib/releases')
 const { roleIn, can, assignable, canApprove } = await import('../src/lib/permissions')
 const { suggestKey } = await import('../src/lib/projects')
-const { matchesWords, searchTodos, searchNotes, isShortcut } = await import('../src/lib/search')
+const { matchesWords, searchTodos, searchNotes, isShortcut, isPlainKey } = await import('../src/lib/search')
 const { viewSearch } = await import('../src/lib/filters')
 const todosLib = await import('../src/lib/todos')
+const backlogLib = await import('../src/lib/backlog')
 type Issue = import('../src/lib/types').Issue
 type IssueEvent = import('../src/lib/types').IssueEvent
 type Sprint = import('../src/lib/types').Sprint
@@ -600,6 +601,69 @@ check('the last thing done to an issue, in words',
   check('a link to a turned-off tab lands on the summary',
     features.projectTabHref({ key: 'WEB', disabled_features: ['calendar'] }, 'calendar') === '/projects/WEB' &&
     features.projectTabHref({ key: 'WEB', disabled_features: [] }, 'calendar') === '/projects/WEB/calendar')
+}
+
+
+// ---------------- the backlog's quick filters and epics ----------------
+{
+  const { EMPTY_BACKLOG_FILTER: F, NO_EPIC, matchesBacklog, backlogFiltered, epicProgress } = backlogLib
+  const now = new Date('2026-10-02T12:00:00').getTime()
+  const mine = issue('m', { assignee_id: 'me', parent_id: 'ep', updated_at: '2026-10-02T08:00:00', title: 'Hero banner' })
+  const theirs = issue('t', { assignee_id: 'them', flag_reason: 'Waiting on copy' })
+  const nobody = issue('n')
+  check('no quick filter keeps everything', [mine, theirs, nobody].every((i) => matchesBacklog(i, F, 'me', now)) && !backlogFiltered(F))
+  check('words match the key or the title', matchesBacklog(mine, { ...F, text: 'banner' }, 'me', now) &&
+    matchesBacklog(mine, { ...F, text: 'M' }, 'me', now) && !matchesBacklog(theirs, { ...F, text: 'banner' }, 'me', now))
+  check('people match any of them, "none" the unassigned', matchesBacklog(nobody, { ...F, people: ['none', 'them'] }, 'me', now) &&
+    matchesBacklog(theirs, { ...F, people: ['none', 'them'] }, 'me', now) && !matchesBacklog(mine, { ...F, people: ['none', 'them'] }, 'me', now))
+  check('“Only my issues” keeps yours', matchesBacklog(mine, { ...F, mine: true }, 'me', now) && !matchesBacklog(nobody, { ...F, mine: true }, 'me', now))
+  check('“Recently updated” is the last day', matchesBacklog(mine, { ...F, recent: true }, 'me', now) &&
+    !matchesBacklog(nobody, { ...F, recent: true }, 'me', now))
+  check('“Flagged” keeps flagged ones', matchesBacklog(theirs, { ...F, flagged: true }, 'me', now) && !matchesBacklog(mine, { ...F, flagged: true }, 'me', now))
+  check('an epic keeps its issues, NO_EPIC those under none', matchesBacklog(mine, { ...F, epic: 'ep' }, 'me', now) &&
+    !matchesBacklog(nobody, { ...F, epic: 'ep' }, 'me', now) && matchesBacklog(nobody, { ...F, epic: NO_EPIC }, 'me', now) &&
+    !matchesBacklog(mine, { ...F, epic: NO_EPIC }, 'me', now))
+  check('…and filters combine', !matchesBacklog(mine, { ...F, epic: 'ep', flagged: true }, 'me', now) && backlogFiltered({ ...F, epic: NO_EPIC }))
+  const p = epicProgress([
+    issue('a', { status_id: 'done', story_points: 3 }), issue('b', { status_id: 'doing', story_points: 2 }), issue('c'),
+  ], statuses)
+  check('an epic’s progress counts done, in progress and points', p.total === 3 && p.done === 1 && p.inProgress === 1 &&
+    p.points === 5 && p.donePoints === 3, JSON.stringify(p))
+
+  const { blockRanks, nextSelection, epicTargetOf } = backlogLib
+  const list = [issue('a', { rank: 100 }), issue('b', { rank: 200 }), issue('c', { rank: 300 })]
+  const mid = blockRanks(list, 1, ['x', 'y', 'z'])
+  check('a block goes between its neighbours, evenly and in order', JSON.stringify(mid) === '[125,150,175]', JSON.stringify(mid))
+  check('…at the top below the first, at the end after the last', JSON.stringify(blockRanks(list, 0, ['x', 'y'])) === '[-1948,-924]' &&
+    JSON.stringify(blockRanks(list, 3, ['x', 'y'])) === '[1324,2348]')
+  check('…leaving out the rows that move', JSON.stringify(blockRanks(list, 1, ['a', 'c'])) === '[1224,2248]' &&
+    JSON.stringify(blockRanks([], 0, ['x'])) === '[1024]')
+  check('…and asks for a rerank when there is no room', blockRanks([issue('a', { rank: 1 }), issue('b', { rank: 1 + 1e-7 })], 1, ['x', 'y']) === null)
+  const order = ['a', 'b', 'c', 'd']
+  check('a click picks one, or lets the only one go', JSON.stringify(nextSelection(['a', 'b'], 'c', 'only', order, 'a')) === '["c"]' &&
+    JSON.stringify(nextSelection(['c'], 'c', 'only', order, 'c')) === '[]')
+  check('Cmd/Ctrl adds or drops one', JSON.stringify(nextSelection(['a'], 'c', 'toggle', order, 'a')) === '["a","c"]' &&
+    JSON.stringify(nextSelection(['a', 'c'], 'a', 'toggle', order, 'c')) === '["c"]')
+  check('Shift adds the range from the last one picked', JSON.stringify(nextSelection(['d', 'b'], 'd', 'range', order, 'b')) === '["d","b","c"]' &&
+    JSON.stringify(nextSelection([], 'c', 'range', order, 'x')) === '["c"]')
+  const t1 = epicTargetOf([issue('w', { parent_id: 'ep' })])
+  const t2 = epicTargetOf([issue('w', { parent_id: 'ep' }), issue('v')])
+  check('the epic menu names one issue, or how many', t1.name === 'W' && t1.epicId === 'ep' && t1.hasEpic &&
+    t2.name === '2 issues' && t2.epicId === null && t2.hasEpic)
+}
+
+{
+  const key = (k: string, extra: Partial<KeyboardEvent> = {}, target: EventTarget | null = document.body) =>
+    ({ key: k, metaKey: false, ctrlKey: false, altKey: false, repeat: false, target, ...extra })
+  const input = document.createElement('input')
+  const inMenu = document.createElement('li')
+  const menu = document.createElement('ul')
+  menu.setAttribute('role', 'menu')
+  menu.append(inMenu)
+  check('a bare letter is a page shortcut', isPlainKey(key('e'), 'e') && isPlainKey(key('E'), 'e') && !isPlainKey(key('f'), 'e'))
+  check('…but not with a modifier or held down', !isPlainKey(key('e', { metaKey: true }), 'e') && !isPlainKey(key('e', { ctrlKey: true }), 'e') &&
+    !isPlainKey(key('e', { altKey: true }), 'e') && !isPlainKey(key('e', { repeat: true }), 'e'))
+  check('…nor typed in a field or pressed in a menu', !isPlainKey(key('e', {}, input), 'e') && !isPlainKey(key('e', {}, inMenu), 'e'))
 }
 
 done()
