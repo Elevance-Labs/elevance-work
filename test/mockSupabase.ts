@@ -165,6 +165,11 @@ const COMMENTS: Row[] = [
   { id: 'c-1', issue_id: 'i-web-2', author_id: 'p-amna', body: '<p>Use the new photo</p>', created_at: at('2026-10-15', '11:00'), edited_at: null },
 ]
 
+// Amna agrees with her own comment.
+const COMMENT_REACTIONS: Row[] = [
+  { comment_id: 'c-1', issue_id: 'i-web-2', profile_id: 'p-amna', kind: 'up', created_at: at('2026-10-15', '11:05') },
+]
+
 // Sara's own two, one Omar shared with her (on WEB-2, done), and one of
 // Omar's she must never see.
 const TODOS: Row[] = [
@@ -302,6 +307,9 @@ function insertDefaults(table: string, row: Row): Row {
     }
     case 'comments':
       return { edited_at: null, ...row, author_id: me()?.id }
+    // comment_reactions_guard: yours, on the comment's issue.
+    case 'comment_reactions':
+      return { ...row, profile_id: me()?.id, issue_id: find('comments', row.comment_id)?.issue_id, created_at: now }
     case 'todos':
       return { notes: '', due_on: null, done_at: null, issue_id: null, project_id: null, position: Date.now(), ...row, owner_id: me()?.id,
         shared_with: ((row.shared_with ?? []) as string[]).filter((id) => id !== me()?.id),
@@ -471,6 +479,7 @@ export function reset() {
     issue_dev_links: [],
     issue_watchers: [{ issue_id: 'i-web-2', profile_id: 'p-sara' }],
     comments: copy(COMMENTS),
+    comment_reactions: copy(COMMENT_REACTIONS),
     attachments: [],
     documents: [],
     saved_filters: [],
@@ -677,6 +686,7 @@ class Query implements PromiseLike<Result> {
         rows = rowsIn(this.name).filter(this.matches)
         db[this.name] = rowsIn(this.name).filter((r) => !this.matches(r))
         // A list's places cascade: its todos are back in the Inbox.
+        if (this.name === 'comments') db.comment_reactions = rowsIn('comment_reactions').filter((r) => !rows.some((c) => c.id === r.comment_id))
         if (this.name === 'todo_lists') db.todo_places = rowsIn('todo_places').filter((p) => !rows.some((l) => l.id === p.list_id))
         break
     }

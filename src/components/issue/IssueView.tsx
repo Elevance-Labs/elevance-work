@@ -54,7 +54,7 @@ import { featureOn } from '../../lib/projectFeatures'
 import { releaseCountdown } from '../../lib/releases'
 import { clearDraft, draftKey, readDraft, writeDraft } from '../../lib/drafts'
 import type {
-  Attachment, Comment, CustomValues, DevLink, Doc, Issue, IssueDetail, IssueEvent, IssueLink, IssueViewMode, Profile,
+  Attachment, Comment, CommentReaction, CustomValues, DevLink, Doc, Issue, IssueDetail, IssueEvent, IssueLink, IssueViewMode, Profile,
 } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { openSprints, useProjectMeta } from '../../workspace/useProjectMeta'
@@ -96,6 +96,7 @@ interface Loaded {
   devLinks: DevLink[]
   docs: Doc[]
   comments: Comment[]
+  reactions: CommentReaction[]
   events: IssueEvent[]
   watchers: string[]
 }
@@ -104,7 +105,7 @@ async function loadIssue(key: string): Promise<Loaded | null> {
   const { data } = await supabase.from('issues').select(ISSUE_DETAIL_COLUMNS).eq('key', key).maybeSingle()
   if (!data) return null
   const issue = data as unknown as IssueDetail
-  const [parent, children, out, inn, attachments, docs, comments, events, watchers, devLinks] = await Promise.all([
+  const [parent, children, out, inn, attachments, docs, comments, reactions, events, watchers, devLinks] = await Promise.all([
     issue.parent_id ? supabase.from('issues').select(ISSUE_COLUMNS).eq('id', issue.parent_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from('issues').select(ISSUE_COLUMNS).eq('parent_id', issue.id),
     supabase.from('issue_links').select('*').eq('source_id', issue.id),
@@ -112,6 +113,7 @@ async function loadIssue(key: string): Promise<Loaded | null> {
     supabase.from('attachments').select('*').eq('issue_id', issue.id).order('created_at'),
     supabase.from('documents').select('*').eq('issue_id', issue.id).order('created_at', { ascending: false }),
     supabase.from('comments').select('*').eq('issue_id', issue.id).order('created_at'),
+    supabase.from('comment_reactions').select('*').eq('issue_id', issue.id).order('created_at'),
     supabase.from('issue_events').select('*').eq('issue_id', issue.id).order('created_at'),
     supabase.from('issue_watchers').select('profile_id').eq('issue_id', issue.id),
     supabase.from('issue_dev_links').select('*').eq('issue_id', issue.id),
@@ -134,6 +136,7 @@ async function loadIssue(key: string): Promise<Loaded | null> {
     devLinks: (devLinks.data ?? []) as DevLink[],
     docs: (docs.data ?? []) as Doc[],
     comments: (comments.data ?? []) as Comment[],
+    reactions: (reactions.data ?? []) as CommentReaction[],
     events: (events.data ?? []) as IssueEvent[],
     watchers: ((watchers.data ?? []) as { profile_id: string }[]).map((w) => w.profile_id),
   }
@@ -810,7 +813,9 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
   const commentsLabel = `Comments${data.comments.length ? ` (${data.comments.length})` : ''}`
   const activityContent = tab === 'comments' ? (
     <Comments issueId={issue.id} comments={data.comments} attachments={data.attachments} role={role} mentionables={mentionables}
+      reactions={data.reactions}
       onChange={(comments) => setData((d) => d && { ...d, comments })}
+      onReactionsChange={(update) => setData((d) => d && { ...d, reactions: update(d.reactions) })}
       onAttachmentsChange={(update) => setData((d) => d && { ...d, attachments: update(d.attachments) })} />
   ) : (
     <History events={releasesOn ? data.events : data.events.filter((e) => e.field !== 'release')} />

@@ -1146,6 +1146,20 @@ create table public.comments (
 );
 create index comments_issue_idx on public.comments (issue_id, created_at);
 
+-- A thumbs up or down on a comment: one per person per comment, goes with it.
+-- comment_reactions_guard stamps who and the comment's issue (for the policies).
+create table public.comment_reactions (
+  comment_id uuid not null,
+  issue_id   uuid not null,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  kind       text not null check (kind in ('up', 'down')),
+  created_at timestamptz not null default now(),
+  primary key (comment_id, profile_id),
+  constraint comment_reactions_comment_fkey foreign key (comment_id, issue_id)
+    references public.comments (id, issue_id) on delete cascade
+);
+create index comment_reactions_issue_idx on public.comment_reactions (issue_id);
+
 -- Files in the project's Drive folder. Written only by the drive function.
 -- A file added with a comment names it; deleting the comment leaves the file
 -- on the issue (and in Drive), just no longer with the comment.
@@ -1722,6 +1736,24 @@ create trigger comments_after_write
   after insert or update on public.comments
   for each row execute function public.comments_after_write();
 
+-- Reactions tell nobody: no notification, no Chat.
+create function public.comment_reactions_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    new.profile_id := public.current_profile_id();
+    select issue_id into new.issue_id from public.comments where id = new.comment_id;
+  elsif new.comment_id <> old.comment_id or new.issue_id <> old.issue_id or new.profile_id <> old.profile_id then
+    raise exception 'A reaction stays on its comment and with its person.' using errcode = '42501';
+  end if;
+  new.created_at := now();
+  return new;
+end;
+$$;
+create trigger comment_reactions_guard
+  before insert or update on public.comment_reactions
+  for each row execute function public.comment_reactions_guard();
+
 create function public.issue_links_stamp()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -2172,6 +2204,10 @@ grant select, delete on public.comments to authenticated;
 grant insert (issue_id, body) on public.comments to authenticated;
 grant update (body) on public.comments to authenticated;
 
+grant select, delete on public.comment_reactions to authenticated;
+grant insert (comment_id, kind) on public.comment_reactions to authenticated;
+grant update (kind) on public.comment_reactions to authenticated;
+
 -- Written and removed only by the drive function (service role).
 grant select on public.attachments to authenticated;
 
@@ -2249,6 +2285,7 @@ alter table public.issue_links enable row level security;
 alter table public.issue_dev_links enable row level security;
 alter table public.issue_watchers enable row level security;
 alter table public.comments enable row level security;
+alter table public.comment_reactions enable row level security;
 alter table public.attachments enable row level security;
 alter table public.documents enable row level security;
 alter table public.saved_filters enable row level security;
@@ -2397,6 +2434,17 @@ create policy comments_update on public.comments for update to authenticated
 create policy comments_delete on public.comments for delete to authenticated
   using (author_id = (select public.current_profile_id())
          or public.can_manage_project((select i.project_id from public.issues i where i.id = issue_id)));
+
+-- Anyone who reads the issue reacts; only you change or remove your reaction.
+create policy comment_reactions_select on public.comment_reactions for select to authenticated
+  using (public.can_view_issue(issue_id));
+create policy comment_reactions_insert on public.comment_reactions for insert to authenticated
+  with check (profile_id = (select public.current_profile_id()) and public.can_view_issue(issue_id));
+create policy comment_reactions_update on public.comment_reactions for update to authenticated
+  using (profile_id = (select public.current_profile_id()))
+  with check (profile_id = (select public.current_profile_id()) and public.can_view_issue(issue_id));
+create policy comment_reactions_delete on public.comment_reactions for delete to authenticated
+  using (profile_id = (select public.current_profile_id()));
 
 create policy attachments_select on public.attachments for select to authenticated
   using (public.can_view_issue(issue_id));

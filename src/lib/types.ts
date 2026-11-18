@@ -223,6 +223,17 @@ export interface Comment {
   edited_at: string | null
 }
 
+export type ReactionKind = 'up' | 'down'
+
+// A thumbs up or down on a comment: one per person per comment.
+export interface CommentReaction {
+  comment_id: string
+  issue_id: string
+  profile_id: string
+  kind: ReactionKind
+  created_at: string
+}
+
 export type DevLinkKind = 'branch' | 'commit' | 'pull_request'
 export type PullRequestState = 'open' | 'draft' | 'merged' | 'closed'
 

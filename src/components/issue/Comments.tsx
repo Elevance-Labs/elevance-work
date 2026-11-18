@@ -1,15 +1,20 @@
 // An issue's comments, newest first. A comment may carry files: they are
 // issue attachments that name the comment, uploaded once it is saved (the
-// drive function only takes files for your own comment).
+// drive function only takes files for your own comment). Anyone who may
+// comment gives a comment a thumbs up or down: one each, again to take it back.
 import { useState } from 'react'
-import { Alert, Box, Button, ButtonBase, LinearProgress, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, ButtonBase, LinearProgress, Stack, Tooltip, Typography } from '@mui/material'
+import ThumbDownIcon from '@mui/icons-material/ThumbDown'
+import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined'
+import ThumbUpIcon from '@mui/icons-material/ThumbUp'
+import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined'
 import { useMe } from '../../auth/AuthProvider'
 import { supabase } from '../../lib/supabase'
 import { uploadFiles } from '../../lib/drive'
 import { can } from '../../lib/permissions'
 import { errorMessage, formatDayTime, timeAgo } from '../../lib/constants'
 import { isBlankHtml, sanitizeHtml } from '../../lib/richText'
-import type { Attachment, Comment, Profile, ProjectRole } from '../../lib/types'
+import type { Attachment, Comment, CommentReaction, Profile, ProjectRole, ReactionKind } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { ConfirmDialog, PersonAvatar } from '../common'
 import { RichTextEditor } from '../RichText'
@@ -103,18 +108,95 @@ function Composer({
   )
 }
 
+type ReactionsUpdate = (update: (rows: CommentReaction[]) => CommentReaction[]) => void
+
+const REACTIONS: { kind: ReactionKind; label: string; on: typeof ThumbUpIcon; off: typeof ThumbUpIcon }[] = [
+  { kind: 'up', label: 'Thumbs up', on: ThumbUpIcon, off: ThumbUpOutlinedIcon },
+  { kind: 'down', label: 'Thumbs down', on: ThumbDownIcon, off: ThumbDownOutlinedIcon },
+]
+
+// A comment's thumbs up and down: counts, who, and yours lit.
+function Reactions({
+  comment,
+  reactions,
+  canReact,
+  onChange,
+  onError,
+}: {
+  comment: Comment
+  // This comment's.
+  reactions: CommentReaction[]
+  canReact: boolean
+  onChange: ReactionsUpdate
+  onError: (message: string | null) => void
+}) {
+  const me = useMe()
+  const { profileById } = useWorkspace()
+  const [busy, setBusy] = useState(false)
+  const mine = reactions.find((r) => r.profile_id === me.id)
+
+  async function react(kind: ReactionKind) {
+    if (busy) return
+    setBusy(true)
+    onError(null)
+    const others = (rows: CommentReaction[]) => rows.filter((r) => !(r.comment_id === comment.id && r.profile_id === me.id))
+    // The same again takes it back; the other one switches.
+    if (mine?.kind === kind) {
+      const { error } = await supabase.from('comment_reactions').delete().eq('comment_id', comment.id).eq('profile_id', me.id)
+      setBusy(false)
+      if (error) return onError(errorMessage(error))
+      return onChange(others)
+    }
+    const { data, error } = mine
+      ? await supabase.from('comment_reactions').update({ kind }).eq('comment_id', comment.id).eq('profile_id', me.id).select().single()
+      : await supabase.from('comment_reactions').insert({ comment_id: comment.id, kind }).select().single()
+    setBusy(false)
+    if (error || !data) return onError(errorMessage(error))
+    onChange((rows) => [...others(rows), data as CommentReaction])
+  }
+
+  return (
+    <>
+      {REACTIONS.map(({ kind, label, on: On, off: Off }) => {
+        const these = reactions.filter((r) => r.kind === kind)
+        if (!canReact && !these.length) return null
+        const lit = mine?.kind === kind
+        const names = these.map((r) => (r.profile_id === me.id ? 'You' : profileById(r.profile_id)?.full_name ?? 'Someone'))
+        const Icon = lit ? On : Off
+        return (
+          <Tooltip key={kind} describeChild title={names.length ? names.join(', ') : label}>
+            <span>
+              <Button size="small" color={lit ? 'primary' : 'inherit'} disabled={!canReact} onClick={() => react(kind)}
+                aria-label={`${label}${these.length ? ` (${these.length})` : ''}`} aria-pressed={lit}
+                sx={{ minWidth: 0, px: 1, color: lit ? undefined : 'text.secondary' }}
+                startIcon={<Icon fontSize="small" />}>
+                {these.length || null}
+              </Button>
+            </span>
+          </Tooltip>
+        )
+      })}
+    </>
+  )
+}
+
 function CommentItem({
   comment,
   attachments,
+  reactions,
   role,
   mentionables,
   files: fileChanges,
   onChanged,
   onDeleted,
+  onReactionsChange,
 }: {
   comment: Comment
   // The files added with it.
   attachments: Attachment[]
+  // Its thumbs up and down.
+  reactions: CommentReaction[]
+  onReactionsChange: ReactionsUpdate
   role: ProjectRole | null
   mentionables: Profile[]
   files: FileChanges
@@ -196,7 +278,8 @@ function CommentItem({
         )}
         {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
         {!editing && (
-          <Stack direction="row" spacing={0.5} sx={{ mt: 0.25, ml: -1 }}>
+          <Stack direction="row" spacing={0.5} sx={{ mt: 0.25, ml: -1, alignItems: 'center' }}>
+            <Reactions comment={comment} reactions={reactions} canReact={can.react(role)} onChange={onReactionsChange} onError={setError} />
             {can.editComment(comment.author_id, me) && <Button size="small" onClick={() => setEditing(true)}>Edit</Button>}
             {can.deleteComment(comment.author_id, me, role) && (
               <Button size="small" color="error" onClick={() => setConfirm(true)}>Delete</Button>
@@ -214,15 +297,21 @@ export default function Comments({
   issueId,
   comments,
   attachments,
+  reactions,
   role,
   mentionables,
   onChange,
+  onReactionsChange,
   onAttachmentsChange,
 }: {
   issueId: string
   comments: Comment[]
   // All the issue's files; each comment shows those added with it.
   attachments: Attachment[]
+  // All the comments' thumbs up and down.
+  reactions: CommentReaction[]
+  // Takes an updater, as the attachments do.
+  onReactionsChange: ReactionsUpdate
   role: ProjectRole | null
   mentionables: Profile[]
   onChange: (comments: Comment[]) => void
@@ -246,9 +335,12 @@ export default function Comments({
       {sorted.map((c) => (
         <CommentItem key={c.id} comment={c} role={role} mentionables={mentionables} files={files}
           attachments={attachments.filter((a) => a.comment_id === c.id)}
+          reactions={reactions.filter((r) => r.comment_id === c.id)} onReactionsChange={onReactionsChange}
           onChanged={(n) => onChange(comments.map((x) => (x.id === n.id ? n : x)))}
           onDeleted={(id) => {
             onChange(comments.filter((x) => x.id !== id))
+            // Its reactions go with it.
+            onReactionsChange((all) => all.filter((r) => r.comment_id !== id))
             // The database keeps its files on the issue, no longer with the comment.
             onAttachmentsChange((all) => all.map((a) => (a.comment_id === id ? { ...a, comment_id: null } : a)))
           }} />

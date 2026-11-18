@@ -22,6 +22,8 @@ export const can = {
   deleteIssues: manages,
   // Viewers too: they read, comment and watch.
   comment: (role: ProjectRole | null) => role !== null,
+  /** A thumbs up or down on a comment: whoever may comment. */
+  react: (role: ProjectRole | null) => role !== null,
   planSprints: edits,
   manageReleases: manages,
   deleteReleases: manages,

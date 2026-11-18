@@ -160,6 +160,25 @@ check('Stop watching removes you', watchers() === 0)
 await click(button('Watch', dialog()!))
 check('Watch adds you back', watchers() === 1)
 
+// Reactions: one each, the other one switches, the same again takes it back
+const firstComment = () => dialog()!.querySelector<HTMLElement>('[data-comment="c-1"]')!
+const pressed = (name: string) => button(name, firstComment())?.getAttribute('aria-pressed') === 'true'
+const myReactions = () => table('comment_reactions').filter((r) => r.profile_id === 'p-sara')
+check('a comment shows its thumbs up, with how many', !!button('Thumbs up (1)', firstComment()) && !pressed('Thumbs up (1)') &&
+  !!button('Thumbs down', firstComment()))
+await click(button('Thumbs down', firstComment()))
+check('…a thumbs down is yours, lit', lastInsert('comment_reactions')?.kind === 'down' && pressed('Thumbs down (1)') &&
+  myReactions().length === 1, JSON.stringify(myReactions()))
+await click(button('Thumbs up (1)', firstComment()))
+check('…a thumbs up switches it', lastUpdate('comment_reactions')?.values.kind === 'up' && pressed('Thumbs up (2)') &&
+  !!button('Thumbs down', firstComment()) && myReactions().length === 1 && myReactions()[0]?.kind === 'up')
+await click(button('Thumbs up (2)', firstComment()))
+check('…the same again takes it back', myReactions().length === 0 && !!button('Thumbs up (1)', firstComment()) &&
+  !pressed('Thumbs up (1)'))
+failNext('comment_reactions.insert', { code: '42501', message: 'permission denied' })
+await click(button('Thumbs up (1)', firstComment()))
+check('…a refused reaction says so and changes nothing', !!firstComment().querySelector('.MuiAlert-root') && myReactions().length === 0)
+
 // Comments, with a mention
 await click(button('Add a comment…', dialog()!))
 await write('Comment', `<p>Over to <span data-type="mention" data-id="p-amna" data-label="Amna Khan">@Amna Khan</span></p>`, dialog()!)
@@ -351,6 +370,7 @@ await settleLazy()
 check('a viewer sees the issue read-only', !!dialog() && labelled<HTMLInputElement>('Status', dialog()!) === null &&
   !!dialog()!.querySelector('.MuiInputBase-root.Mui-disabled'))
 check('…can comment', !!button('Add a comment…', dialog()!))
+check('…and react to one', !!button('Thumbs up (1)', dialog()!) && !button('Thumbs up (1)', dialog()!)?.hasAttribute('disabled'))
 check('…but not attach or add docs', !button('Attach', dialog()!) && !button('Link existing', dialog()!) && !button('Add doc', dialog()!) &&
   !button('Link issue', dialog()!))
 await click(button('Add a comment…', dialog()!))
