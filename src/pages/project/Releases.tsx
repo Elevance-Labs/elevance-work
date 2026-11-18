@@ -7,8 +7,8 @@ import { supabase } from '../../lib/supabase'
 import { can } from '../../lib/permissions'
 import { RELEASE_STATUS_COLORS, RELEASE_STATUS_LABELS, errorMessage, formatDate, todayIso } from '../../lib/constants'
 import { ISSUE_COLUMNS } from '../../lib/issues'
-import { releaseProgress } from '../../lib/releases'
-import type { Issue, ReleaseStatus } from '../../lib/types'
+import { APPROVAL_COLORS, approvalLabel, releaseApproval, releaseProgress } from '../../lib/releases'
+import type { Issue, ReleaseApprover, ReleaseStatus } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { useProjectMeta } from '../../workspace/useProjectMeta'
 import { EmptyState, Loading } from '../../components/common'
@@ -22,6 +22,7 @@ export default function Releases() {
   const statuses = statusesOf(project.id)
   const [tab, setTab] = useState<ReleaseStatus>('unreleased')
   const [issues, setIssues] = useState<Issue[] | null>(null)
+  const [approvers, setApprovers] = useState<Pick<ReleaseApprover, 'release_id' | 'decision'>[]>([])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,6 +35,14 @@ export default function Releases() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Where each release's approval stands.
+  const releaseIds = (meta?.releases ?? []).map((r) => r.id).join()
+  useEffect(() => {
+    if (!releaseIds) return
+    supabase.from('release_approvers').select('release_id, decision').in('release_id', releaseIds.split(','))
+      .then(({ data }) => setApprovers((data ?? []) as Pick<ReleaseApprover, 'release_id' | 'decision'>[]))
+  }, [releaseIds])
 
   if (!meta || !issues) return <Loading />
   const releases = meta.releases.filter((r) => r.status === tab)
@@ -60,16 +69,20 @@ export default function Releases() {
       <Stack spacing={1.5}>
         {releases.map((r) => {
           const p = releaseProgress(issues.filter((i) => i.release_id === r.id), statuses)
-          const late = r.status === 'unreleased' && r.release_date && r.release_date < today
+          const late = r.status === 'unreleased' && r.release_date < today
+          const approval = releaseApproval(r, approvers.filter((a) => a.release_id === r.id))
           return (
             <Paper key={r.id} variant="outlined" component={Link} to={`/projects/${project.key}/releases/${r.id}`}
               sx={{ p: 2, display: 'block', textDecoration: 'none', color: 'inherit', '&:hover': { borderColor: 'primary.light' } }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 2 }} sx={{ alignItems: { sm: 'center' } }}>
                 <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
                     <Typography variant="subtitle1">{r.name}</Typography>
                     <Chip size="small" label={RELEASE_STATUS_LABELS[r.status]} color={RELEASE_STATUS_COLORS[r.status]} variant="outlined" />
                     {late && <Chip size="small" color="error" label="Overdue" />}
+                    {approval.state !== 'none' && r.status === 'unreleased' && (
+                      <Chip size="small" variant="outlined" color={APPROVAL_COLORS[approval.state]} label={approvalLabel(approval)} />
+                    )}
                   </Stack>
                   {r.description && <Typography variant="body2" noWrap sx={{ color: 'text.secondary' }}>{r.description}</Typography>}
                 </Box>
@@ -83,7 +96,7 @@ export default function Releases() {
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>{p.done} of {p.total} issues done</Typography>
                 </Box>
                 <Typography variant="body2" sx={{ color: late ? 'error.main' : 'text.secondary', whiteSpace: 'nowrap', minWidth: 110 }}>
-                  {r.status === 'released' && r.released_at ? `Released ${formatDate(r.released_at.slice(0, 10))}` : r.release_date ? formatDate(r.release_date) : 'No date'}
+                  {r.status === 'released' && r.released_at ? `Released ${formatDate(r.released_at.slice(0, 10))}` : formatDate(r.release_date)}
                 </Typography>
               </Stack>
             </Paper>

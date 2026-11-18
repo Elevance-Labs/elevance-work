@@ -22,15 +22,19 @@ export const COMPANY_TIME_ZONE = 'Asia/Karachi'
 
 export const APP_ROLE_LABELS: Record<AppRole, string> = { admin: 'Workspace admin', member: 'Member' }
 
+export const PROJECT_ROLES: ProjectRole[] = ['admin', 'manager', 'member', 'viewer']
+
 export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
   admin: 'Admin',
+  manager: 'Manager',
   member: 'Member',
   viewer: 'Viewer',
 }
 
 export const PROJECT_ROLE_HELP: Record<ProjectRole, string> = {
-  admin: 'Everything a member can, plus settings, people, workflow and deleting issues',
-  member: 'Creates and edits issues, plans sprints and releases',
+  admin: 'Everything a manager can, plus settings, people and workflow',
+  manager: 'Everything a member can, plus releases (notes, approvers, releasing) and deleting issues',
+  member: 'Creates and edits issues and plans sprints',
   viewer: 'Reads, comments and watches',
 }
 

@@ -110,7 +110,7 @@ const SPRINTS: Row[] = [
 ]
 
 const RELEASES: Row[] = [
-  { id: 'rl-1', project_id: 'pr-web', name: 'v1.0', description: 'First public site', start_date: '2026-10-01',
+  { id: 'rl-1', project_id: 'pr-web', name: 'v1.0', description: 'First public site', notes: '', start_date: '2026-10-01',
     release_date: '2026-10-30', status: 'unreleased', released_at: null, created_at: at('2026-10-01') },
 ]
 
@@ -315,7 +315,9 @@ function insertDefaults(table: string, row: Row): Row {
       return { title: '', body: '', color: 'yellow', label_ids: [], project_id: null, pinned: false, meeting_id: null, meeting_title: null,
         meeting_on: null, ...row, owner_id: me()?.id, updated_at: now, archived_at: null }
     case 'releases':
-      return { description: '', start_date: null, release_date: null, status: 'unreleased', released_at: null, ...row, created_by: me()?.id }
+      return { description: '', notes: '', start_date: null, status: 'unreleased', released_at: null, ...row, created_by: me()?.id }
+    case 'release_approvers':
+      return { ...row, decision: null, comment: '', decided_at: null, added_by: me()?.id, created_at: now }
     case 'documents':
       return { issue_id: null, drive_file_id: null, ...row, created_by: me()?.id }
     case 'sprints':
@@ -333,6 +335,14 @@ function insertDefaults(table: string, row: Row): Row {
   }
 }
 
+// release_approvals_reset: an unreleased release's decisions go back to pending.
+function resetApprovals(releaseId: unknown) {
+  if (!releaseId || find('releases', releaseId)?.status !== 'unreleased') return
+  for (const a of rowsIn('release_approvers')) {
+    if (a.release_id === releaseId) Object.assign(a, { decision: null, comment: '', decided_at: null })
+  }
+}
+
 // What the database's triggers change on update.
 function updateEffects(table: string, row: Row, values: Row) {
   if (table === 'issues') {
@@ -345,7 +355,9 @@ function updateEffects(table: string, row: Row, values: Row) {
   // notes_guard: an archived note is never pinned.
   if (table === 'notes' && row.archived_at) row.pinned = false
   if (table === 'todos' && values.issue_id) row.project_id = find('issues', values.issue_id)?.project_id ?? null
-  if (table === 'releases' && 'status' in values) row.released_at = values.status === 'released' ? new Date().toISOString() : null
+  // releases_guard: stamped on going out, cleared on coming back; archiving keeps it.
+  if (table === 'releases' && values.status === 'released') row.released_at = new Date().toISOString()
+  if (table === 'releases' && values.status === 'unreleased') row.released_at = null
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +454,7 @@ export function reset() {
     workspace_settings: [{ id: true, chat_webhook_url: null, chat_events: ['release_released'] }],
     sprints: copy(SPRINTS),
     releases: copy(RELEASES),
+    release_approvers: [],
     issues: copy(ISSUES),
     issue_events: [],
     sprint_issues: [],
@@ -633,6 +646,11 @@ class Query implements PromiseLike<Result> {
       case 'update':
         rows = rowsIn(this.name).filter(this.matches)
         for (const r of rows) {
+          // issues_release_changed: moving an issue in or out of a release asks its approvers again.
+          if (this.name === 'issues' && 'release_id' in input[0] && input[0].release_id !== r.release_id) {
+            resetApprovals(r.release_id)
+            resetApprovals(input[0].release_id)
+          }
           Object.assign(r, input[0])
           updateEffects(this.name, r, input[0])
         }
@@ -686,6 +704,16 @@ class Query implements PromiseLike<Result> {
 // Simplified stand-ins for the SQL functions: enough for the pages to show
 // the result. The rules they enforce are tested in test/sql/.
 const RPCS: Record<string, (args: Row) => unknown> = {
+  // release_decide: your own pending decision only.
+  release_decide: ({ p_release, p_decision, p_comment }) => {
+    const a = rowsIn('release_approvers').find((r) => r.release_id === p_release && r.profile_id === me()?.id && !r.decision)
+    if (a) Object.assign(a, { decision: p_decision, comment: String(p_comment ?? '').trim(), decided_at: new Date().toISOString() })
+    return null
+  },
+  release_request_approval: ({ p_release }) => {
+    resetApprovals(p_release)
+    return null
+  },
   // The stored row, as the database would (what you changed on it sticks).
   bind_profile: () => (authState.bound && (rowsIn('profiles').find((p) => p.id === authState.bound!.id) as Profile | undefined)) ?? authState.bound,
   current_profile_id: () => authState.bound?.id ?? null,

@@ -14,7 +14,8 @@ behaviour).
   Sibling of `el-support` and `el-people`; same stack and conventions.
 - Modules: **projects** (Scrum / Kanban), **issues** (types by level, custom
   fields, links, watchers, history), **board**, **backlog** and **sprints**,
-  **timeline** (epics), **releases** (with notes), **summary** (project intelligence: widgets a
+  **timeline** (epics), **releases** (rich-text notes on top, approvers
+  who approve or reject, locked once approved; the Summary's outlook beside), **summary** (project intelligence: widgets a
   project's admins choose, incl. the classic reports; no Reports tab), **docs** (Google Drive),
   **project features** (admins turn off Timeline, Calendar, Issues, Board, Releases, Docs),
   **issue lists and saved filters** (pinned to the navigation per person), **calendar** (meetings only from each
@@ -50,9 +51,10 @@ behaviour).
   removed.
 - **Project access is one function.** `role_in_project` (workspace admin → admin
   everywhere; else membership; open project → viewer; archived → viewer at
-  most). Policies use `can_view_project` / `can_edit_project` /
-  `can_admin_project` / `can_view_issue` / `can_edit_issue`. Never inline a new
-  rule in a policy.
+  most). Roles: admin (settings) › manager (releases; removing others' work)
+  › member (edits) › viewer (reads, comments). Policies use `can_view_project` /
+  `can_edit_project` / `can_manage_project` / `can_admin_project` /
+  `can_view_issue` / `can_edit_issue`. Never inline a new rule in a policy.
 - **Business rules live in triggers.** `issues_guard` numbers issues, fills
   defaults, enforces the hierarchy, sprint, release and assignee rules, checks
   custom values (`issue_custom_clean`) and stamps `resolved_at`.
@@ -72,7 +74,11 @@ behaviour).
   `project_statuses_reorder` / `fields_reorder`; leaving someone else's
   todo only by `todo_leave`; where a todo sits in your lists only by
   `todo_move` (`todo_places` has no client writes); ranks renumber via
-  `project_rerank`.
+  `project_rerank`; a release approver's decision only by `release_decide`,
+  and back to pending by `release_request_approval` or an issue moving in or
+  out of the release (`issues_release_changed`). `release_approvers_guard` and
+  `releases_guard` keep an approved release locked and unreleasable until
+  every approver approved.
 - **Some rows are written only by Edge Functions (service role).**
   `calendar_connections` (no client grants at all: encrypted Google refresh
   tokens, used only for their owner's own calendar), `attachments`,
@@ -155,7 +161,8 @@ behaviour).
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
 | `src/components/issue/` | The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
-| `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
+| `src/components/releases/` | The release page's parts: `ReleaseNotesCard` (the notes on top: view, write with a draft from done issues, copy, Google Doc), `ApprovalPanel` (approvers, approve / reject, ask again). |
+| `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `useReleaseHealth` / `ReleaseOutlook` (one release's judgement, shared by the release widget and the release page), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to pinned ones or not: the notes page, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
 | `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
@@ -220,7 +227,7 @@ behaviour).
   formatting (plain dates as local `YYYY-MM-DD`), `errorMessage` (Postgres codes
   to words).
 - `permissions.ts` — `roleIn` (mirror of `role_in_project`), `can.*`,
-  `assignable`.
+  `assignable`, `canApprove`.
 - `issues.ts` — select column lists, the client write shape, key parsing, ranks
   (`rankBetween` / `rankForIndex`; null → rerank), level and category helpers,
   label normalising, history in words (`HISTORY_FIELD_LABELS`,
@@ -242,7 +249,9 @@ behaviour).
 - `paging.ts` — `fetchAll` / `fetchByIds`: every row past PostgREST's
   1000-row cap, ids chunked for `in` filters.
 - `releases.ts` — progress, days left (`releaseCountdown`, on the issue's
-  Release field) and release notes (text and HTML).
+  Release field), the notes' draft from done issues and the written notes as
+  text and HTML, approval state (`releaseApproval`: cleared, locked; mirrors
+  `release_cleared` / `release_approved`).
 - `drafts.ts` — unsaved text kept in the browser per person (an issue's
   description until saved or cancelled).
 - `timeline.ts` — the epic timeline: rows (an epic's own dates, or borrowed
@@ -292,7 +301,12 @@ Full detail in `supabase/schema.sql`.
 - `project_integrations` / `workspace_settings` — Chat webhooks and wanted events.
 - `sprints` — future → active → closed (one active per project); `sprint_issues`
   — committed / completed snapshot per sprint.
-- `releases` — unreleased / released / archived; `released_at` stamped.
+- `releases` — unreleased / released / archived; `released_at` stamped;
+  `release_date` required; `notes` (rich text, public one day) beside the
+  internal `description`; managers and admins write them.
+  `release_approvers` — per release, who approves and their decision
+  (pending / approved / rejected, with a comment); managers add and remove
+  (not once decided), decisions only via RPC.
 - `issues` — the issue; `key`, `rank`, `custom`, `search` (tsvector);
   `issue_events` — field-by-field history (names copied in);
   `issue_links`, `issue_watchers`, `comments`, `attachments` (a file added

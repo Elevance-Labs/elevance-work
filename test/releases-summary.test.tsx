@@ -1,6 +1,6 @@
 // Releases (planning, releasing, notes as a Google Doc), the project summary
 // and its widgets (the old reports among them), and the project's docs.
-import { setupDom, reporter, text, button, click, dialog, type, choose, freezeToday, waitFor, menuItem } from './setup'
+import { setupDom, reporter, text, button, click, dialog, type, choose, freezeToday, waitFor, menuItem, settleLazy, write, field } from './setup'
 setupDom()
 
 const { mountApp, location } = await import('./app')
@@ -22,34 +22,122 @@ reset()
 signInAs(PEOPLE.member)
 await mountApp('/projects/WEB/releases')
 check('releases are listed with their progress', text().includes('v1.0') && text().includes('1 of 2 issues done'))
+check('…but a member doesn\'t plan them', !button('New release'))
+
+reset()
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases')
 await click(button('New release'))
 await type('Name', 'v1.1')
 await click(button('Save', dialog()!))
+check('a release needs its date', !!dialog() && !captured.inserts.some((i) => i.table === 'releases'))
+await type('Release date', '2026-11-30')
+await click(button('Save', dialog()!))
 const rel = captured.inserts.find((i) => i.table === 'releases')?.rows[0]
-check('a release is planned', rel?.name === 'v1.1' && rel.project_id === 'pr-web', JSON.stringify(rel))
+check('a manager plans a release', rel?.name === 'v1.1' && rel.project_id === 'pr-web' && rel.release_date === '2026-11-30', JSON.stringify(rel))
 
 reset()
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases/rl-1')
+const notesCard = () => document.querySelector<HTMLElement>('[data-release-notes]')
+const approvalCard = () => document.querySelector<HTMLElement>('[data-approval]')
+check('a release leads with its notes, then its issues', !!notesCard() && notesCard()!.textContent!.includes('No release notes yet') &&
+  !!(notesCard()!.compareDocumentPosition(document.querySelector('[data-release-issues]')!) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+  text().includes('Hero banner') && text().includes('Fix the footer links'))
+const description = document.querySelector('[data-release-description]')
+check('…its internal description above the notes', description?.textContent === 'First public site' &&
+  !!(description.compareDocumentPosition(notesCard()!) & Node.DOCUMENT_POSITION_FOLLOWING))
+check('…its dates beside, and the outlook counting the issues', !!document.querySelector('[data-release-details]')?.textContent?.includes('Release date') &&
+  !document.querySelector('[data-release-details]')?.textContent?.includes('First public site') &&
+  !document.querySelector('[data-release-details]')?.textContent?.includes('issues done') &&
+  await waitFor(() => document.querySelector('[data-outlook]')?.textContent?.includes('1 of 2 issues done')))
+await click(button('Draft from done issues', notesCard()!))
+await settleLazy()
+check('notes are drafted from what is done', notesCard()!.querySelector('.ProseMirror[aria-label="Release notes"]')?.textContent?.includes('WEB-3 Fix the footer links'))
+await write('Release notes', '<p>A faster site.</p><h2>Bug fixes</h2><ul><li><p>WEB-3 Fix the footer links</p></li></ul>')
+await click(button('Save notes'))
+const savedNotes = captured.updates.find((u) => u.table === 'releases' && 'notes' in u.values)
+check('…and saved on the release', String(savedNotes?.values.notes).includes('A faster site.') && JSON.stringify(savedNotes?.filters) === '[["id","eq","rl-1"]]')
+check('…then shown on top', await waitFor(() => notesCard()?.textContent?.includes('A faster site.') && !!button('Edit notes')))
+await click(button('Save as Google Doc'))
+const docCall = captured.functions.find((f) => (f.body as { action?: string }).action === 'create_doc')
+const body = docCall?.body as { project_id: string; doc_type: string; html: string; title: string } | undefined
+check('…and can be saved as a Google Doc in the project folder', body?.project_id === 'pr-web' && body.doc_type === 'document' &&
+  body.html.includes('A faster site.') && body.html.includes('<h2>Bug fixes</h2>') && !body.html.includes('First public site') && body.title.includes('v1.0'),
+  JSON.stringify(body))
+check('with no approvers it needs no sign-off', approvalCard()?.dataset.approval === 'none')
+
+// Approvers: Sara (a member) and Omar (a viewer).
+reset()
+table('release_approvers').push(
+  { release_id: 'rl-1', profile_id: 'p-sara', decision: null, comment: '', decided_at: null, added_by: 'p-amna', created_at: TODAY },
+  { release_id: 'rl-1', profile_id: 'p-omar', decision: null, comment: '', decided_at: null, added_by: 'p-amna', created_at: TODAY },
+)
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases/rl-1')
+check('a release waits for its approvers', approvalCard()?.textContent?.includes('Awaiting approval (0 of 2)') &&
+  button('Release')?.hasAttribute('disabled') === true, approvalCard()?.textContent ?? '')
+await click(button('Remove Omar Farooq'))
+const removed = captured.deletes.find((d) => d.table === 'release_approvers')
+check('a manager removes an approver who hasn\'t decided', JSON.stringify(removed?.filters) === '[["release_id","eq","rl-1"],["profile_id","eq","p-omar"]]',
+  JSON.stringify(removed))
+
 signInAs(PEOPLE.member)
 await mountApp('/projects/WEB/releases/rl-1')
-check('a release shows its issues', text().includes('Hero banner') && text().includes('Fix the footer links'))
+check('an approver sees where it stands, but not the manager\'s controls', !!button('Approve') && !button('Release') && !button('Edit notes'))
+await click(button('Reject'))
+await click(button('Reject', dialog()!))
+check('a rejection says why', !!dialog() && !captured.rpcs.some((r) => r.name === 'release_decide'))
+await click(button('Cancel', dialog()!))
+await click(button('Approve'))
+await click(button('Approve', dialog()!))
+const decided = captured.rpcs.find((r) => r.name === 'release_decide')
+check('an approver approves', decided?.args?.p_decision === 'approved' && decided.args.p_release === 'rl-1', JSON.stringify(decided))
+check('…approved by all, it is locked', await waitFor(() => approvalCard()?.dataset.approval === 'approved' && text().includes('Approved')))
+
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases/rl-1')
+check('locked: the details and notes don\'t change, no approver is added',
+  button('Edit')?.hasAttribute('disabled') === true && button('Write notes')?.hasAttribute('disabled') === true && !field('Add an approver'))
+await click(button('Remove WEB-2 from the release'))
+check('taking an issue out asks the approvers again', await waitFor(() => approvalCard()?.dataset.approval === 'pending'),
+  approvalCard()?.dataset.approval)
+check('…and unlocks it', button('Edit')?.hasAttribute('disabled') === false)
+
+table('release_approvers').forEach((a) => Object.assign(a, { decision: 'approved', decided_at: TODAY }))
+table('issues').find((i) => i.id === 'i-web-2')!.release_id = 'rl-1'
+await mountApp('/projects/WEB/releases/rl-1')
 await click(button('Release'))
-check('releasing says what is done', dialog()?.textContent?.includes('1 of 2 issues are done'))
+check('releasing an approved release keeps its unfinished issues (moving them would ask again)',
+  dialog()?.textContent?.includes('1 of 2 issues are done') && dialog()?.textContent?.includes('would ask the approvers again') &&
+  !field('The 1 unfinished issue', dialog()!))
+await click(button('Release', dialog()!))
+const released = captured.updates.find((u) => u.table === 'releases' && u.values.status === 'released')
+check('…then it is released', JSON.stringify(released?.filters) === '[["id","eq","rl-1"]]' &&
+  !captured.updates.some((u) => u.table === 'issues' && u.values.release_id === null && JSON.stringify(u.filters).includes('"in"')))
+check('…and shows as released', await waitFor(() => text().includes('Unrelease')))
+
+// Without approvers, unfinished work can leave the release as it goes.
+reset()
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases/rl-1')
+await click(button('Release'))
 await choose('The 1 unfinished issue', 'Remove from any release')
 await click(button('Release', dialog()!))
 const moved = captured.updates.find((u) => u.table === 'issues')
 check('unfinished work leaves the release first', moved?.values.release_id === null && JSON.stringify(moved.filters) === '[["id","in",["i-web-2"]]]',
   JSON.stringify(moved))
-const released = captured.updates.find((u) => u.table === 'releases')
-check('…then it is released', released?.values.status === 'released' && JSON.stringify(released.filters) === '[["id","eq","rl-1"]]')
-check('…and shows as released', await waitFor(() => text().includes('Unrelease')))
 
-await click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Release notes'))
-check('release notes group what shipped', text().includes('Bug fixes') && text().includes('WEB-3'))
-await click(button('Save as Google Doc'))
-const docCall = captured.functions.find((f) => (f.body as { action?: string }).action === 'create_doc')
-const body = docCall?.body as { project_id: string; doc_type: string; html: string; title: string } | undefined
-check('…and can be saved as a Google Doc in the project folder', body?.project_id === 'pr-web' && body.doc_type === 'document' &&
-  body.html.includes('<h2>Bug fixes</h2>') && body.html.includes('WEB-3 Fix the footer links') && body.title.includes('v1.0'), JSON.stringify(body))
+// Archiving: any release, and back to where it was.
+reset()
+signInAs(PEOPLE.admin)
+await mountApp('/projects/WEB/releases/rl-1')
+await click(button('Archive'))
+const archived = captured.updates.find((u) => u.table === 'releases')
+check('a release not yet out can be archived', archived?.values.status === 'archived' && JSON.stringify(archived.filters) === '[["id","eq","rl-1"]]')
+check('…and comes back unreleased', await waitFor(() => !!button('Unarchive')) && !button('Release') && !!button('Delete'))
+await click(button('Unarchive'))
+check('…when it never went out', captured.updates.filter((u) => u.table === 'releases').at(-1)?.values.status === 'unreleased')
 
 // ---------------- the summary ----------------
 const widget = (key: string) => document.querySelector<HTMLElement>(`[data-widget="${key}"]`)

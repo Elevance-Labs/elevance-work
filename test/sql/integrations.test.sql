@@ -43,7 +43,7 @@ select t.eq('an event the project didn''t pick isn''t sent',
 
 -- ---------------- calendar ----------------
 delete from net.calls;
-select t.login('sara');
+select t.login('amna');
 insert into public.releases (project_id, name, release_date) values (t.project('WEB'), 'v1.5', '2026-10-30');
 select t.superuser();
 select t.eq('a dated release is pushed to the shared Google Calendar',
@@ -67,7 +67,7 @@ select t.throws('the workspace space announces releases only (there are no calen
 select t.eq('…which it does by default', (select chat_events from public.workspace_settings), '{release_released}'::text[]);
 
 delete from net.calls;
-select t.login('sara');
+select t.login('amna');
 insert into public.releases (project_id, name, release_date) values (t.project('WEB'), 'v2', '2026-12-01');
 update public.releases set status = 'released' where name = 'v2';
 select t.superuser();

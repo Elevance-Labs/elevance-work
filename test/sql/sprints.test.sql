@@ -74,17 +74,25 @@ select t.throws('…but not while a sprint is active',
 
 -- ---------------- releases ----------------
 select t.login('sara');
+select t.throws('a member doesn''t plan releases',
+  $$insert into public.releases (project_id, name, release_date) values (t.project('WEB'), 'v0.9', '2026-11-20')$$, '42501');
+select t.login('amna');
 insert into public.releases (project_id, name, release_date) values (t.project('WEB'), 'v1.0', '2026-11-20');
+select t.throws('a release needs a release date',
+  $$insert into public.releases (project_id, name) values (t.project('WEB'), 'v1.1')$$, '23502');
 select t.throws('release names are unique in a project, ignoring case',
-  $$insert into public.releases (project_id, name) values (t.project('WEB'), 'V1.0')$$, '23505');
+  $$insert into public.releases (project_id, name, release_date) values (t.project('WEB'), 'V1.0', '2026-11-21')$$, '23505');
 update public.issues set release_id = (select id from public.releases where name = 'v1.0') where key = 'WEB-2';
 update public.releases set status = 'released' where name = 'v1.0';
 select t.ok('releasing stamps the time', (select released_at is not null from public.releases where name = 'v1.0'));
 update public.releases set status = 'unreleased' where name = 'v1.0';
 select t.ok('…and unreleasing clears it', (select released_at is null from public.releases where name = 'v1.0'));
 select t.throws('a release must be in the issue''s project',
-  $$insert into public.releases (project_id, name) values (t.project('OPS'), 'ops-1');
+  $$insert into public.releases (project_id, name, release_date) values (t.project('OPS'), 'ops-1', '2026-11-20');
     update public.issues set release_id = (select id from public.releases where name = 'ops-1') where key = 'WEB-2'$$,
   '23514');
+select t.login('sara');
+select t.ok('a member still sets an issue''s release',
+  t.rows($$update public.issues set release_id = null where key = 'WEB-2'$$) = 1);
 select t.eq('a member can''t delete a release',
   t.rows($$delete from public.releases where name = 'v1.0'$$), 0::bigint);

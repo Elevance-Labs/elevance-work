@@ -201,7 +201,7 @@ async function deleteAttachment(admin: Admin, user: User, me: string, attachment
     .select("id, issue_id, drive_file_id, uploaded_by, issues!inner(project_id)").eq("id", attachmentId).single();
   if (!a) return json({ error: "Not found" }, 404);
   const projectId = (a.issues as unknown as { project_id: string }).project_id;
-  const mayDelete = a.uploaded_by === me || (await allowed(user, "can_admin_project", { p_project: projectId }));
+  const mayDelete = a.uploaded_by === me || (await allowed(user, "can_manage_project", { p_project: projectId }));
   if (!mayDelete || !(await allowed(user, "can_view_issue", { p_issue: a.issue_id }))) {
     return json({ error: "Only the person who added it, or a project admin, can remove this file." }, 403);
   }

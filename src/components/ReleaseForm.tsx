@@ -6,7 +6,8 @@ import type { Release } from '../lib/types'
 import { invalidateProjectMeta } from '../workspace/useProjectMeta'
 import { FormDialog } from './common'
 
-// Create or edit a release (its name, dates and description).
+// Create or edit a release: its name, dates (the release date required) and
+// internal description. Its public notes are written on the release page.
 export default function ReleaseForm({
   open,
   release,
@@ -29,9 +30,11 @@ export default function ReleaseForm({
 
   async function save() {
     if (!name.trim()) return setError('Give the release a name, e.g. v1.4.')
+    if (!date) return setError('Set the release date.')
+    if (start && start > date) return setError('The start date must be on or before the release date.')
     setBusy(true)
     setError(null)
-    const values = { name: name.trim(), description, start_date: start || null, release_date: date || null }
+    const values = { name: name.trim(), description, start_date: start || null, release_date: date }
     const { data, error: e } = release
       ? await supabase.from('releases').update(values).eq('id', release.id).select().single()
       : await supabase.from('releases').insert({ ...values, project_id: projectId }).select().single()
@@ -47,11 +50,12 @@ export default function ReleaseForm({
       <TextField label="Name" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="v1.4" />
       <Stack direction="row" spacing={2}>
         <TextField label="Start date" type="date" value={start} fullWidth slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => setStart(e.target.value)} />
-        <TextField label="Release date" type="date" value={date} fullWidth slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => setDate(e.target.value)} />
+        <TextField label="Release date" type="date" required value={date} fullWidth slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => setDate(e.target.value)} />
       </Stack>
-      <TextField label="Description" multiline minRows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+      <TextField label="Description" multiline minRows={3} value={description} onChange={(e) => setDescription(e.target.value)}
+        helperText="Internal, for the team. Release notes are written on the release itself." />
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        A release with a date shows on the shared calendar (and Google Calendar, once connected).
+        The release shows on the shared calendar (and Google Calendar, once connected).
       </Typography>
     </FormDialog>
   )

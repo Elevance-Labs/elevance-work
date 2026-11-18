@@ -2,7 +2,7 @@
 // supabase/schema.sql: change both together.
 
 export type AppRole = 'admin' | 'member'
-export type ProjectRole = 'admin' | 'member' | 'viewer'
+export type ProjectRole = 'admin' | 'manager' | 'member' | 'viewer'
 export type ProjectKind = 'scrum' | 'kanban'
 export type ProjectVisibility = 'private' | 'open'
 export type ProjectFeature = 'timeline' | 'calendar' | 'issues' | 'board' | 'releases' | 'docs'
@@ -12,6 +12,7 @@ export type IssuePriority = 'highest' | 'high' | 'medium' | 'low' | 'lowest'
 export type FieldKind = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'user' | 'url' | 'checkbox'
 export type SprintState = 'future' | 'active' | 'closed'
 export type ReleaseStatus = 'unreleased' | 'released' | 'archived'
+export type ReleaseDecision = 'approved' | 'rejected'
 export type LinkKind = 'blocks' | 'relates' | 'duplicates' | 'clones'
 export type DocType = 'document' | 'spreadsheet' | 'presentation' | 'form' | 'drawing' | 'folder' | 'file'
 export type NotificationKind = 'assigned' | 'mentioned' | 'commented' | 'status_changed' | 'test'
@@ -125,11 +126,24 @@ export interface Release {
   id: string
   project_id: string
   name: string
+  // Internal; `notes` (rich text) are the release notes, public one day.
   description: string
+  notes: string
   start_date: string | null
-  release_date: string | null
+  release_date: string
   status: ReleaseStatus
   released_at: string | null
+  created_at: string
+}
+
+/** Someone who approves a release; decision null until they decide (only through release_decide). */
+export interface ReleaseApprover {
+  release_id: string
+  profile_id: string
+  decision: ReleaseDecision | null
+  comment: string
+  decided_at: string | null
+  added_by: string | null
   created_at: string
 }
 

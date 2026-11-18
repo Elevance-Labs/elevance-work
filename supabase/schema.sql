@@ -8,7 +8,7 @@
 create type public.app_role as enum ('admin', 'member');
 -- A workspace admin is admin of every project; everyone else has the role
 -- their membership gives, or viewer on an open project.
-create type public.project_role as enum ('admin', 'member', 'viewer');
+create type public.project_role as enum ('admin', 'manager', 'member', 'viewer');
 create type public.project_kind as enum ('scrum', 'kanban');
 create type public.project_visibility as enum ('private', 'open');
 create type public.status_category as enum ('todo', 'in_progress', 'done');
@@ -18,6 +18,7 @@ create type public.field_kind as enum
   ('text', 'number', 'date', 'select', 'multi_select', 'user', 'url', 'checkbox');
 create type public.sprint_state as enum ('future', 'active', 'closed');
 create type public.release_status as enum ('unreleased', 'released', 'archived');
+create type public.release_decision as enum ('approved', 'rejected');
 create type public.link_kind as enum ('blocks', 'relates', 'duplicates', 'clones');
 create type public.doc_type as enum
   ('document', 'spreadsheet', 'presentation', 'form', 'drawing', 'folder', 'file');
@@ -300,12 +301,18 @@ $$;
 
 create function public.can_edit_project(p_project uuid)
 returns boolean language sql stable set search_path = '' as $$
-  select coalesce(public.project_role_of(p_project) in ('admin', 'member'), false);
+  select coalesce(public.project_role_of(p_project) in ('admin', 'manager', 'member'), false);
 $$;
 
 create function public.can_admin_project(p_project uuid)
 returns boolean language sql stable set search_path = '' as $$
   select coalesce(public.project_role_of(p_project) = 'admin', false);
+$$;
+
+-- Releases, and removing what others made: admins and managers.
+create function public.can_manage_project(p_project uuid)
+returns boolean language sql stable set search_path = '' as $$
+  select coalesce(public.project_role_of(p_project) in ('admin', 'manager'), false);
 $$;
 
 create function public.projects_guard()
@@ -500,18 +507,146 @@ create table public.releases (
   id              uuid primary key default gen_random_uuid(),
   project_id      uuid not null references public.projects (id) on delete cascade,
   name            text not null check (length(trim(name)) between 1 and 80),
+  -- Internal; `notes` are the release notes, rich text, public one day.
   description     text not null default '' check (length(description) <= 2000),
   start_date      date,
-  release_date    date,
+  release_date    date not null,
   status          public.release_status not null default 'unreleased',
   released_at     timestamptz,
   -- Its entry in the shared Google Calendar, kept by calendar-sync.
   google_event_id text,
   created_by      uuid references public.profiles (id) on delete set null,
   created_at      timestamptz not null default now(),
+  notes           text not null default '' check (length(notes) <= 100000),
   check (release_date >= start_date)
 );
 create unique index releases_name_key on public.releases (project_id, lower(name));
+
+-- Who approves a release, and what they decided (null: not yet). Managers
+-- add and remove approvers; a decision is made only through release_decide
+-- and stands until approval is asked for again.
+create table public.release_approvers (
+  release_id uuid not null references public.releases (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  decision   public.release_decision,
+  comment    text not null default '' check (length(comment) <= 1000),
+  decided_at timestamptz,
+  added_by   uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (release_id, profile_id)
+);
+create index release_approvers_profile_idx on public.release_approvers (profile_id);
+
+-- Nothing stands in the way of releasing: every approver approved (or there are none).
+create function public.release_cleared(p_release uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select not exists (select 1 from public.release_approvers
+                      where release_id = p_release and decision is distinct from 'approved');
+$$;
+
+-- Approved, and so locked: it has approvers and they all approved.
+create function public.release_approved(p_release uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.release_approvers where release_id = p_release)
+     and public.release_cleared(p_release);
+$$;
+
+-- Asking for approval again: every decision on an unreleased release goes back to pending.
+create function public.release_approvals_reset(p_release uuid)
+returns void language sql security definer set search_path = '' as $$
+  update public.release_approvers a
+     set decision = null, comment = '', decided_at = null
+   where a.release_id = p_release and a.decision is not null
+     and exists (select 1 from public.releases r where r.id = p_release and r.status = 'unreleased');
+$$;
+
+create function public.release_approvers_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_release public.releases;
+begin
+  -- Going with its release or its person: nothing to check.
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
+    return old;
+  end if;
+  select * into v_release from public.releases
+   where id = case when tg_op = 'DELETE' then old.release_id else new.release_id end;
+  if found and v_release.status <> 'unreleased' then
+    raise exception 'Approvers change only until the release is released.' using errcode = '23514';
+  end if;
+  if tg_op = 'INSERT' then
+    if public.release_approved(new.release_id) then
+      raise exception 'This release is approved, so it''s locked. Ask for approval again first.' using errcode = '23514';
+    end if;
+    if public.role_in_project(new.profile_id, v_release.project_id) is null then
+      raise exception 'An approver must be an active person who can see this project.' using errcode = '23514';
+    end if;
+    new.decision := null;
+    new.comment := '';
+    new.decided_at := null;
+    new.added_by := public.current_profile_id();
+    new.created_at := now();
+    return new;
+  end if;
+  if old.decision is not null then
+    raise exception 'Someone who has decided stays an approver until approval is asked for again.' using errcode = '23514';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger release_approvers_guard
+  before insert or delete on public.release_approvers
+  for each row execute function public.release_approvers_guard();
+
+-- An approver approves or rejects (saying why), once until approval is asked for again.
+create function public.release_decide(p_release uuid, p_decision public.release_decision, p_comment text default '')
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_release public.releases;
+  v_me      uuid := public.current_profile_id();
+begin
+  select * into v_release from public.releases where id = p_release;
+  if not found or not public.can_view_project(v_release.project_id) then
+    raise exception 'That release doesn''t exist.' using errcode = '42501';
+  end if;
+  if v_release.status <> 'unreleased' then
+    raise exception 'This release is already released.' using errcode = '23514';
+  end if;
+  if p_decision is null then
+    raise exception 'Approve or reject.' using errcode = '23514';
+  end if;
+  if p_decision = 'rejected' and trim(coalesce(p_comment, '')) = '' then
+    raise exception 'Say why you''re rejecting it.' using errcode = '23514';
+  end if;
+  update public.release_approvers
+     set decision = p_decision, comment = left(trim(coalesce(p_comment, '')), 1000), decided_at = now()
+   where release_id = p_release and profile_id = v_me and decision is null;
+  if not found then
+    if exists (select 1 from public.release_approvers where release_id = p_release and profile_id = v_me) then
+      raise exception 'You''ve decided already. It stands until approval is asked for again.' using errcode = '23514';
+    end if;
+    raise exception 'You aren''t an approver of this release.' using errcode = '42501';
+  end if;
+end;
+$$;
+
+-- A manager asks every approver again (after a rejection, or to change an approved release).
+create function public.release_request_approval(p_release uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_release public.releases;
+begin
+  select * into v_release from public.releases where id = p_release;
+  if not found or not public.can_manage_project(v_release.project_id) then
+    raise exception 'Only the project''s admins and managers ask for approval.' using errcode = '42501';
+  end if;
+  if v_release.status <> 'unreleased' then
+    raise exception 'This release is already released.' using errcode = '23514';
+  end if;
+  perform public.release_approvals_reset(p_release);
+end;
+$$;
 
 create function public.sprints_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
@@ -543,6 +678,15 @@ begin
   else
     if new.project_id <> old.project_id then
       raise exception 'A release belongs to one project.' using errcode = '42501';
+    end if;
+    -- Approved by everyone: locked until approval is asked for again.
+    if old.status = 'unreleased' and public.release_approved(old.id)
+       and (new.name, new.description, new.notes, new.start_date, new.release_date)
+           is distinct from (old.name, old.description, old.notes, old.start_date, old.release_date) then
+      raise exception 'This release is approved, so it''s locked. Ask for approval again to change it.' using errcode = '23514';
+    end if;
+    if new.status = 'released' and old.status <> 'released' and not public.release_cleared(old.id) then
+      raise exception 'Every approver must approve this release before it''s released.' using errcode = '23514';
     end if;
     if new.status = 'released' and old.status <> 'released' then
       new.released_at := now();
@@ -787,7 +931,7 @@ begin
   end if;
 
   if new.assignee_id is not null and (tg_op = 'INSERT' or new.assignee_id is distinct from old.assignee_id)
-     and coalesce(public.role_in_project(new.assignee_id, new.project_id) in ('admin', 'member'), false) = false then
+     and coalesce(public.role_in_project(new.assignee_id, new.project_id) in ('admin', 'manager', 'member'), false) = false then
     raise exception 'Only a member of this project can be assigned.' using errcode = '23514';
   end if;
 
@@ -834,6 +978,30 @@ $$;
 create trigger issues_delete_subtasks
   before delete on public.issues
   for each row execute function public.issues_delete_subtasks();
+
+-- An approval covers the issues a release had: adding one or taking one
+-- away asks for it again.
+create function public.issues_release_changed()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') and old.release_id is not null then
+    perform public.release_approvals_reset(old.release_id);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and new.release_id is not null then
+    perform public.release_approvals_reset(new.release_id);
+  end if;
+  return null;
+end;
+$$;
+
+create trigger issues_release_added_or_removed
+  after insert or delete on public.issues
+  for each row execute function public.issues_release_changed();
+
+create trigger issues_release_moved
+  after update of release_id on public.issues
+  for each row when (old.release_id is distinct from new.release_id)
+  execute function public.issues_release_changed();
 
 create trigger issue_types_guard
   before update on public.issue_types
@@ -1935,8 +2103,12 @@ grant insert (project_id, name, goal, start_date, end_date) on public.sprints to
 grant update (name, goal, start_date, end_date) on public.sprints to authenticated;
 
 grant select, delete on public.releases to authenticated;
-grant insert (project_id, name, description, start_date, release_date, status) on public.releases to authenticated;
-grant update (name, description, start_date, release_date, status) on public.releases to authenticated;
+grant insert (project_id, name, description, start_date, release_date, status, notes) on public.releases to authenticated;
+grant update (name, description, start_date, release_date, status, notes) on public.releases to authenticated;
+
+-- Decisions only through release_decide.
+grant select, delete on public.release_approvers to authenticated;
+grant insert (release_id, profile_id) on public.release_approvers to authenticated;
 
 -- number, key, resolved_at, created_by are set by issues_guard.
 grant select, delete on public.issues to authenticated;
@@ -2004,13 +2176,14 @@ grant select (id, profile_id, endpoint, device, created_at, last_used_at), delet
 grant execute on function
   public.current_profile_id(), public.is_admin(), public.project_role_of(uuid),
   public.can_view_project(uuid), public.can_edit_project(uuid), public.can_admin_project(uuid),
-  public.can_view_issue(uuid), public.can_edit_issue(uuid),
+  public.can_manage_project(uuid), public.can_view_issue(uuid), public.can_edit_issue(uuid),
   public.bind_profile(), public.project_create(text, text, public.project_kind, public.project_visibility, text),
   public.project_statuses_reorder(uuid, uuid[]), public.fields_reorder(uuid, uuid[]),
   public.project_rerank(uuid), public.sprint_start(uuid, date, date, text, text),
   public.sprint_complete(uuid, uuid), public.todo_leave(uuid), public.todo_move(uuid, uuid),
   public.save_push_subscription(text, text, text, text, boolean), public.send_test_notification(),
-  public.watched_activity(integer)
+  public.watched_activity(integer), public.release_decide(uuid, public.release_decision, text),
+  public.release_request_approval(uuid)
   to authenticated;
 
 grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;
@@ -2028,6 +2201,7 @@ alter table public.project_integrations enable row level security;
 alter table public.workspace_settings enable row level security;
 alter table public.sprints enable row level security;
 alter table public.releases enable row level security;
+alter table public.release_approvers enable row level security;
 alter table public.issues enable row level security;
 alter table public.issue_events enable row level security;
 alter table public.sprint_issues enable row level security;
@@ -2127,11 +2301,18 @@ create policy sprints_delete on public.sprints for delete to authenticated
 create policy releases_select on public.releases for select to authenticated
   using (public.can_view_project(project_id));
 create policy releases_insert on public.releases for insert to authenticated
-  with check (public.can_edit_project(project_id));
+  with check (public.can_manage_project(project_id));
 create policy releases_update on public.releases for update to authenticated
-  using (public.can_edit_project(project_id)) with check (public.can_edit_project(project_id));
+  using (public.can_manage_project(project_id)) with check (public.can_manage_project(project_id));
 create policy releases_delete on public.releases for delete to authenticated
-  using (public.can_admin_project(project_id));
+  using (public.can_manage_project(project_id));
+
+create policy release_approvers_select on public.release_approvers for select to authenticated
+  using (public.can_view_project((select r.project_id from public.releases r where r.id = release_id)));
+create policy release_approvers_insert on public.release_approvers for insert to authenticated
+  with check (public.can_manage_project((select r.project_id from public.releases r where r.id = release_id)));
+create policy release_approvers_delete on public.release_approvers for delete to authenticated
+  using (public.can_manage_project((select r.project_id from public.releases r where r.id = release_id)));
 
 create policy issues_select on public.issues for select to authenticated
   using (public.can_view_project(project_id));
@@ -2140,7 +2321,7 @@ create policy issues_insert on public.issues for insert to authenticated
 create policy issues_update on public.issues for update to authenticated
   using (public.can_edit_project(project_id)) with check (public.can_edit_project(project_id));
 create policy issues_delete on public.issues for delete to authenticated
-  using (public.can_admin_project(project_id));
+  using (public.can_manage_project(project_id));
 
 create policy issue_events_select on public.issue_events for select to authenticated
   using (public.can_view_project(project_id));
@@ -2175,7 +2356,7 @@ create policy comments_update on public.comments for update to authenticated
   with check (author_id = (select public.current_profile_id()));
 create policy comments_delete on public.comments for delete to authenticated
   using (author_id = (select public.current_profile_id())
-         or public.can_admin_project((select i.project_id from public.issues i where i.id = issue_id)));
+         or public.can_manage_project((select i.project_id from public.issues i where i.id = issue_id)));
 
 create policy attachments_select on public.attachments for select to authenticated
   using (public.can_view_issue(issue_id));
@@ -2187,7 +2368,7 @@ create policy documents_insert on public.documents for insert to authenticated
 create policy documents_update on public.documents for update to authenticated
   using (public.can_edit_project(project_id)) with check (public.can_edit_project(project_id));
 create policy documents_delete on public.documents for delete to authenticated
-  using (created_by = (select public.current_profile_id()) or public.can_admin_project(project_id));
+  using (created_by = (select public.current_profile_id()) or public.can_manage_project(project_id));
 
 create policy saved_filters_select on public.saved_filters for select to authenticated
   using (owner_id = (select public.current_profile_id())

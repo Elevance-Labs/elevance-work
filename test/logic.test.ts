@@ -16,8 +16,8 @@ const { EMPTY_FILTER, applyFilter, filterFromSearch, filterToSearch, filterToQue
 const { rankBetween, rankForIndex, parseIssueKey, normaliseLabels, activityLine } = await import('../src/lib/issues')
 const { docTypeFromUrl, embedUrl } = await import('../src/lib/drive')
 const { sanitizeHtml, mentionedIds, isBlankHtml } = await import('../src/lib/richText')
-const { releaseNotes, notesText, releaseCountdown } = await import('../src/lib/releases')
-const { roleIn } = await import('../src/lib/permissions')
+const { releaseNotes, notesText, releaseCountdown, draftNotesHtml, htmlToPlainText, releaseApproval, approvalLabel } = await import('../src/lib/releases')
+const { roleIn, can, assignable, canApprove } = await import('../src/lib/permissions')
 const { suggestKey } = await import('../src/lib/projects')
 const { matchesWords, searchTodos, searchNotes, isShortcut } = await import('../src/lib/search')
 const { viewSearch } = await import('../src/lib/filters')
@@ -209,6 +209,17 @@ check('roleIn mirrors role_in_project',
   roleIn(proj('private'), people.admin as never, []) === 'admin' && roleIn(proj('private'), people.m as never, mem) === 'member' &&
   roleIn(proj('private'), people.m as never, []) === null && roleIn(proj('open'), people.m as never, []) === 'viewer' &&
   roleIn(proj('private', 'x'), people.m as never, mem) === 'viewer' && roleIn(proj('private'), people.gone as never, mem) === null)
+check('the four project roles: admins set up, managers release, members edit, viewers read',
+  can.manageProject('admin') && !can.manageProject('manager') &&
+  can.manageReleases('manager') && can.deleteIssues('manager') && !can.manageReleases('member') && !can.deleteIssues('member') &&
+  can.editIssues('member') && can.editIssues('manager') && !can.editIssues('viewer') && can.comment('viewer'))
+const team = [
+  { id: 'mg', app_role: 'member', active: true }, { id: 'v', app_role: 'member', active: true }, { id: 'out', app_role: 'member', active: true },
+] as never[]
+const teamRoles = [{ project_id: 'p', profile_id: 'mg', role: 'manager' as const }, { project_id: 'p', profile_id: 'v', role: 'viewer' as const }]
+check('managers are assigned like members; viewers approve but aren\'t assigned',
+  assignable(proj('private'), team, teamRoles).map((p) => p.id).join() === 'mg' &&
+  canApprove(proj('private'), team, teamRoles).map((p) => p.id).join() === 'mg,v')
 
 // ---------------- Google links ----------------
 check('Google links are recognised by kind', docTypeFromUrl('https://docs.google.com/spreadsheets/d/abc/edit') === 'spreadsheet' &&
@@ -247,8 +258,28 @@ const notes = releaseNotes([
 ], types, statuses)
 check('release notes: stories first, then fixes; sub-tasks roll up; unfinished left out',
   notes.sections.map((s) => s.title).join() === 'New and changed,Bug fixes' && notes.unfinished.length === 1, JSON.stringify(notes.sections.map((s) => s.title)))
-check('…as plain text to paste', notesText('Site', { name: 'v1', release_date: null, description: '' } as never, notes.sections) ===
-  'Site v1\n\nNew and changed\n• W-1 Hero\n\nBug fixes\n• W-2 Broken link')
+const drafted = draftNotesHtml(notes.sections)
+check('…drafted as headings and lists to write the notes from',
+  drafted === '<h2>New and changed</h2><ul><li><p>W-1 Hero</p></li></ul><h2>Bug fixes</h2><ul><li><p>W-2 Broken link</p></li></ul>', drafted)
+check('the written notes as plain text to paste, internal description left out',
+  notesText('Site', { name: 'v1', release_date: '2026-11-10', description: 'internal', notes: `<p>Faster pages.</p>${drafted}` } as never) ===
+  'Site v1 — Nov 10, 2026\n\nFaster pages.\n\nNew and changed\n• W-1 Hero\n\nBug fixes\n• W-2 Broken link',
+  notesText('Site', { name: 'v1', release_date: '2026-11-10', description: 'internal', notes: `<p>Faster pages.</p>${drafted}` } as never))
+check('…keeping numbered and nested lists', htmlToPlainText('<ol><li><p>One</p><ul><li><p>Inner</p></li></ul></li><li><p>Two</p></li></ol>') ===
+  '1. One\n  • Inner\n2. Two', htmlToPlainText('<ol><li><p>One</p><ul><li><p>Inner</p></li></ul></li><li><p>Two</p></li></ol>'))
+
+// ---------------- a release's approval ----------------
+const unrel = { status: 'unreleased' } as const
+const ap = (...d: ('approved' | 'rejected' | null)[]) => d.map((decision) => ({ decision }))
+check('a release with no approvers needs no approval and can go', releaseApproval(unrel, []).state === 'none' &&
+  releaseApproval(unrel, []).cleared && !releaseApproval(unrel, []).locked)
+check('…with some still to decide it waits, unlocked', releaseApproval(unrel, ap('approved', null)).state === 'pending' &&
+  !releaseApproval(unrel, ap('approved', null)).cleared && approvalLabel(releaseApproval(unrel, ap('approved', null))) === 'Awaiting approval (1 of 2)')
+check('…one rejection rejects it', releaseApproval(unrel, ap('approved', 'rejected')).state === 'rejected' &&
+  !releaseApproval(unrel, ap('approved', 'rejected')).cleared)
+check('…all approved: cleared and locked', releaseApproval(unrel, ap('approved', 'approved')).locked &&
+  releaseApproval(unrel, ap('approved', 'approved')).cleared)
+check('…and once released, no longer locked', !releaseApproval({ status: 'released' }, ap('approved')).locked)
 
 // ---------------- a release's days left ----------------
 const relRow = (extra: object) => ({ status: 'unreleased', release_date: '2026-10-30', released_at: null, ...extra }) as never
@@ -405,8 +436,9 @@ check('the last thing done to an issue, in words',
   check('the generator is seeded: the same release forecasts the same', seeded() === again() && seeded() === again())
 
   // Releases
+  // Undated releases predate the required release date; nextRelease still copes.
   const R = (id: string, release_date: string | null, extra: Partial<Release> = {}): Release => ({ id, project_id: 'p', name: id, description: '',
-    start_date: null, release_date, status: 'unreleased', released_at: null, created_at: at('2026-10-01'), ...extra })
+    notes: '', start_date: null, release_date: release_date as string, status: 'unreleased', released_at: null, created_at: at('2026-10-01'), ...extra })
   check('the next release is the soonest unreleased, undated last',
     insights.nextRelease([R('late', '2026-12-01'), R('undated', null), R('soon', '2026-11-01'), R('shipped', '2026-10-01', { status: 'released' })])?.id === 'soon')
   check('…or an undated one when nothing has a date', insights.nextRelease([R('undated', null)])?.id === 'undated')

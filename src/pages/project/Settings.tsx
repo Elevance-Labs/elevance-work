@@ -43,6 +43,7 @@ import {
   PROJECT_KIND_LABELS,
   PROJECT_ROLE_HELP,
   PROJECT_ROLE_LABELS,
+  PROJECT_ROLES,
   errorMessage,
 } from '../../lib/constants'
 import type {
@@ -214,7 +215,7 @@ function People() {
           <PersonPicker label="Add a person" value={adding} options={candidates} noneLabel="Choose someone" onChange={setAdding} />
         </Box>
         <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value as ProjectRole)} sx={{ minWidth: 140 }}>
-          {(['admin', 'member', 'viewer'] as ProjectRole[]).map((r) => <MenuItem key={r} value={r}>{PROJECT_ROLE_LABELS[r]}</MenuItem>)}
+          {PROJECT_ROLES.map((r) => <MenuItem key={r} value={r}>{PROJECT_ROLE_LABELS[r]}</MenuItem>)}
         </TextField>
         <Button variant="contained" disabled={!adding} loading={s.busy} onClick={async () => {
           if (adding && await s.run(() => supabase.from('project_members').insert({ project_id: project.id, profile_id: adding, role }))) {
@@ -236,7 +237,7 @@ function People() {
                     onChange={async (e) => {
                       if (await s.run(() => supabase.from('project_members').update({ role: e.target.value }).eq('project_id', project.id).eq('profile_id', m.profile_id))) await after()
                     }}>
-                    {(['admin', 'member', 'viewer'] as ProjectRole[]).map((r) => <MenuItem key={r} value={r}>{PROJECT_ROLE_LABELS[r]}</MenuItem>)}
+                    {PROJECT_ROLES.map((r) => <MenuItem key={r} value={r}>{PROJECT_ROLE_LABELS[r]}</MenuItem>)}
                   </TextField>
                 </TableCell>
                 <TableCell align="right">
@@ -252,7 +253,7 @@ function People() {
         </Table>
       </Paper>
       <Stack spacing={0.5} sx={{ mt: 2 }}>
-        {(['admin', 'member', 'viewer'] as ProjectRole[]).map((r) => (
+        {PROJECT_ROLES.map((r) => (
           <Typography key={r} variant="caption" sx={{ color: 'text.secondary' }}><strong>{PROJECT_ROLE_LABELS[r]}</strong>: {PROJECT_ROLE_HELP[r]}</Typography>
         ))}
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>Workspace admins are admins of every project.</Typography>
