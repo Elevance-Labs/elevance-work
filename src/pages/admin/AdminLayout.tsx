@@ -1,8 +1,10 @@
 // Workspace admin, one page reached from the header's Admin button (workspace
 // admins only: the routes aren't registered for anyone else). Its tabs are
 // People, Issue types and Workspace; each tab keeps its own header.
+import { Suspense } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { Tab, Tabs } from '@mui/material'
+import { Loading } from '../../components/common'
 
 const TABS = [
   { to: '/admin/people', label: 'People' },
@@ -19,7 +21,9 @@ export default function AdminLayout() {
         sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         {TABS.map((t) => <Tab key={t.to} value={t.to} label={t.label} component={Link} to={t.to} />)}
       </Tabs>
-      <Outlet />
+      <Suspense fallback={<Loading />}>
+        <Outlet />
+      </Suspense>
     </>
   )
 }

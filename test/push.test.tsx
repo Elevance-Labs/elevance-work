@@ -216,10 +216,18 @@ check('the worker handles pushes and taps', sw.includes("addEventListener('push'
 check('…and caches the status-bar badge with the app', sw.includes('icons/badge-96.png'))
 
 const SCOPE = 'https://app.example/work/'
-function boot({ windows = [] as string[] } = {}) {
+function boot({ windows = [] as string[], stored = null as string | null, network = 'fresh page' as string | null } = {}) {
   const handlers: Record<string, (e: unknown) => void> = {}
   const log = { shown: [] as { title: string; options: Record<string, unknown> & { data: { url: string } } }[], badges: [] as number[],
-    opened: [] as string[], focused: [] as string[], messages: [] as { url: string; m: { type: string; url?: string; id?: string } }[] }
+    opened: [] as string[], focused: [] as string[], messages: [] as { url: string; m: { type: string; url?: string; id?: string } }[],
+    fetched: [] as string[] }
+  // This version's cache: the shell (the scope's page), when one is stored.
+  const caches = { open: async () => ({ match: async (key: string) => (key === SCOPE && stored !== null ? new Response(stored) : undefined) }) }
+  const fetch = async (url: string) => {
+    log.fetched.push(url)
+    if (network === null) throw new TypeError('offline')
+    return new Response(network)
+  }
   const self = {
     registration: { scope: SCOPE, showNotification: async (title: string, options: never) => { log.shown.push({ title, options }) } },
     clients: {
@@ -233,13 +241,21 @@ function boot({ windows = [] as string[] } = {}) {
     addEventListener: (type: string, fn: (e: unknown) => void) => { handlers[type] = fn },
     skipWaiting: () => {},
   }
-  vm.runInNewContext(sw, { self, caches: {}, URL, Response, Request, fetch, Promise, JSON, Date, console })
+  vm.runInNewContext(sw, { self, caches, URL, Response, Request, fetch, Promise, JSON, Date, console })
   const fire = async (type: string, event: object) => {
     let pending: Promise<unknown> = Promise.resolve()
     handlers[type]({ ...event, waitUntil: (p: Promise<unknown>) => { pending = p } })
     await pending
   }
-  return { fire, log }
+  // A page load: what the worker answers with, as text (null: no answer).
+  const navigate = async (url: string) => {
+    let answer: Promise<Response> | null = null
+    handlers.fetch({ request: { method: 'GET', url, mode: 'navigate' }, respondWith: (p: Promise<Response>) => { answer = p } })
+    if (!answer) return null
+    const response: Response = await answer
+    return response.type === 'error' ? 'error' : response.text()
+  }
+  return { fire, log, navigate }
 }
 const pushEvent = (data: unknown) => ({
   data: typeof data === 'string' ? { json: () => JSON.parse(data), text: () => data } : { json: () => data, text: () => JSON.stringify(data) },
@@ -279,6 +295,24 @@ for (const [path, why] of [['https://evil.example/', 'another site'], ['../suppo
   const { fire, log } = boot()
   await fire('notificationclick', { notification: { data: { url: `${SCOPE}#/dashboard?issue=WEB-2` }, close() {} } })
   check('with the app closed, a tap opens it on the issue', log.opened[0] === `${SCOPE}#/dashboard?issue=WEB-2`)
+}
+
+{
+  const { log, navigate } = boot({ stored: 'stored page' })
+  check('an installed app opens from its stored page, not the host', await navigate(`${SCOPE}`) === 'stored page' && log.fetched.length === 0)
+  check('…so does the return from Google (?code=)', await navigate(`${SCOPE}?code=abc`) === 'stored page' && log.fetched.length === 0)
+}
+{
+  const { log, navigate } = boot()
+  check('with nothing stored, the page comes from the network', await navigate(`${SCOPE}`) === 'fresh page' && log.fetched[0] === SCOPE)
+}
+{
+  const { navigate } = boot({ network: null })
+  check('nothing stored and no network: an error, not a hang', await navigate(`${SCOPE}`) === 'error')
+}
+{
+  const { log, navigate } = boot({ stored: 'stored page' })
+  check('a page outside its folder is left alone (a sibling app)', await navigate('https://app.example/support/') === null && log.fetched.length === 0)
 }
 
 // ---------------------------------------------------------------------------

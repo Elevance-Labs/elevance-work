@@ -1,7 +1,7 @@
 // The frame around every project page: its header, its tabs, and the
 // project in context for the page below. A project you can't see doesn't
 // exist here, as it doesn't in the database.
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Link, Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
 import { Alert, Box, Button, Chip, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import AddToDriveIcon from '@mui/icons-material/AddToDrive'
@@ -11,7 +11,7 @@ import { projectFolderUrl } from '../../lib/drive'
 import { featureOn, projectTabHref, tabFeature } from '../../lib/projectFeatures'
 import type { ProjectFeature } from '../../lib/types'
 import { useWorkspace } from '../../workspace/WorkspaceProvider'
-import { EmptyState } from '../../components/common'
+import { EmptyState, Loading } from '../../components/common'
 import { ProjectAvatar } from '../../components/IssueBits'
 import { ProjectContext } from './projectContext'
 
@@ -90,7 +90,10 @@ export default function ProjectLayout() {
       <Tabs value={current?.to ?? false} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         {tabs.map((t) => <Tab key={t.to} value={t.to} label={t.label} component={Link} to={t.to} />)}
       </Tabs>
-      <Outlet />
+      {/* A tab's first showing loads its chunk; the header and tabs stay put. */}
+      <Suspense fallback={<Loading />}>
+        <Outlet />
+      </Suspense>
     </ProjectContext.Provider>
   )
 }

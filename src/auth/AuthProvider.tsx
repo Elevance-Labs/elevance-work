@@ -5,6 +5,7 @@ import { SSO_PARAM, ssoHint } from '../lib/suite'
 import { CALENDAR_SIGN_IN, calendarSignInPrompt, takeCalendarGrant } from '../lib/googleCalendar'
 import type { Profile } from '../lib/types'
 import { forgetPushDevice } from '../components/usePushDevice'
+import { dropEarlyWorkspace, readWorkspaceEarly } from '../workspace/workspaceRead'
 
 interface AuthState {
   loading: boolean
@@ -97,17 +98,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!sessionReady) return
     if (!userId) {
+      dropEarlyWorkspace()
       setProfile(null)
       return
     }
     let cancelled = false
     setBinding(true)
+    // The workspace is read at the same time, not after: a profile bound on an
+    // earlier visit can already read it (the provider checks the read was).
+    readWorkspaceEarly()
     supabase
       .rpc('bind_profile')
       .maybeSingle()
       .then(async ({ data, error: rpcError }) => {
         if (cancelled) return
         if (rpcError || !data) {
+          dropEarlyWorkspace()
           setError(rpcError ? `Could not verify your account: ${rpcError.message}` : NOT_ALLOWED)
           await supabase.auth.signOut()
         } else {
@@ -117,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     return () => {
       cancelled = true
+      dropEarlyWorkspace()
     }
   }, [sessionReady, userId])
 

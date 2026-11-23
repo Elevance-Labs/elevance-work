@@ -83,7 +83,7 @@ Elevance Work can be **installed** (a PWA). It then opens in its own window (or 
 
 - **What is kept on the device** is the app itself (scripts, styles, fonts, icons), so it opens at once. **Nothing from Supabase is ever cached**: every record is fetched each time, and none of it is readable offline. Without a connection the app opens and shows nothing.
 - **A new version waits to be asked.** After a deploy the app says *"A new version is available"* with a **Reload** button. Until you press it, or close every window of the app, you keep the build you started with.
-- **Opening the app always asks for the latest page.** The copy kept on the device is used only with no connection, so a deploy shows the next time the app is opened; the prompt above is for an app that is already open.
+- **Opening the app uses the copy on the device.** The app starts from the version it keeps, without waiting on the host, so it opens at once. A deploy arrives through the prompt above: the app looks for one each time it opens or comes back to the front.
 - No working offline.
 
 It is built by [`vite.pwa.ts`](vite.pwa.ts), a small build plugin with no dependency, which writes `manifest.webmanifest` and `sw.js` at build time. The icons are in `public/icons/`; replace those files to change the artwork, keeping it inside the middle 80% of the square (phones crop it to a circle). `badge-96.png` is the small white silhouette Android shows in the status bar. Our apps are served from one origin, so the service worker only answers for, and only clears caches belonging to, its own folder.

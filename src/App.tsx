@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthProvider'
 import { WorkspaceProvider } from './workspace/WorkspaceProvider'
@@ -5,29 +6,16 @@ import { NotificationsProvider } from './workspace/notifications'
 import Layout from './components/Layout'
 import { Splash } from './components/common'
 import Login from './pages/Login'
+// Home is where the app opens: it comes with the shell. Every other page is
+// its own chunk, parsed when first shown (or when the browser is idle).
 import Dashboard from './pages/home/Dashboard'
-import Todos from './pages/home/Todos'
-import Notes from './pages/home/Notes'
-import Calendar from './pages/Calendar'
-import Issues from './pages/Issues'
-import Work from './pages/Work'
-import BrowseIssue from './pages/BrowseIssue'
-import ProjectLayout from './pages/project/ProjectLayout'
-import Summary from './pages/project/Summary'
-import Backlog from './pages/project/Backlog'
-import Board from './pages/project/Board'
-import ProjectIssues from './pages/project/ProjectIssues'
-import Releases from './pages/project/Releases'
-import ReleaseDetail from './pages/project/ReleaseDetail'
-import Timeline from './pages/project/Timeline'
-import ProjectCalendar from './pages/project/ProjectCalendar'
-import ProjectDocs from './pages/project/Docs'
-import ProjectSettings from './pages/project/Settings'
-import ProjectNotesRedirect from './pages/project/NotesRedirect'
-import AdminLayout from './pages/admin/AdminLayout'
-import People from './pages/admin/People'
-import IssueTypes from './pages/admin/IssueTypes'
-import WorkspaceSettings from './pages/admin/Workspace'
+import { preloadWhenIdle } from './components/lazyPage'
+import * as pages from './lazyPages'
+
+function PreloadNavPages() {
+  useEffect(() => preloadWhenIdle(pages.NAV_PAGES), [])
+  return null
+}
 
 export default function App() {
   const { loading, profile, isAdmin } = useAuth()
@@ -38,40 +26,41 @@ export default function App() {
   return (
     <WorkspaceProvider key={profile.id}>
       <NotificationsProvider>
+      <PreloadNavPages />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/todos" element={<Todos />} />
-          <Route path="/notes" element={<Notes />} />
-          <Route path="/calendar" element={<Calendar />} />
-          <Route path="/issues" element={<Issues />} />
-          <Route path="/work" element={<Work />} />
+          <Route path="/todos" element={<pages.todos.Page />} />
+          <Route path="/notes" element={<pages.notes.Page />} />
+          <Route path="/calendar" element={<pages.calendar.Page />} />
+          <Route path="/issues" element={<pages.issues.Page />} />
+          <Route path="/work" element={<pages.work.Page />} />
           {/* Work replaced the projects list. */}
           <Route path="/projects" element={<Navigate to="/work" replace />} />
-          <Route path="/browse/:key" element={<BrowseIssue />} />
+          <Route path="/browse/:key" element={<pages.browseIssue.Page />} />
           {/* Each project page checks the project is visible; settings also that you administer it. */}
-          <Route path="/projects/:key" element={<ProjectLayout />}>
-            <Route index element={<Summary />} />
-            <Route path="backlog" element={<Backlog />} />
-            <Route path="board" element={<Board />} />
-            <Route path="issues" element={<ProjectIssues />} />
-            <Route path="releases" element={<Releases />} />
-            <Route path="releases/:releaseId" element={<ReleaseDetail />} />
-            <Route path="timeline" element={<Timeline />} />
-            <Route path="calendar" element={<ProjectCalendar />} />
+          <Route path="/projects/:key" element={<pages.projectLayout.Page />}>
+            <Route index element={<pages.summary.Page />} />
+            <Route path="backlog" element={<pages.backlog.Page />} />
+            <Route path="board" element={<pages.board.Page />} />
+            <Route path="issues" element={<pages.projectIssues.Page />} />
+            <Route path="releases" element={<pages.releases.Page />} />
+            <Route path="releases/:releaseId" element={<pages.releaseDetail.Page />} />
+            <Route path="timeline" element={<pages.timeline.Page />} />
+            <Route path="calendar" element={<pages.projectCalendar.Page />} />
             {/* Reports are Summary widgets now; old links land there. */}
             <Route path="reports" element={<Navigate to=".." relative="path" replace />} />
-            <Route path="docs" element={<ProjectDocs />} />
+            <Route path="docs" element={<pages.projectDocs.Page />} />
             {/* Your notes on a project live in Notes, filtered to it. */}
-            <Route path="notes" element={<ProjectNotesRedirect />} />
-            <Route path="settings" element={<ProjectSettings />} />
+            <Route path="notes" element={<pages.projectNotesRedirect.Page />} />
+            <Route path="settings" element={<pages.projectSettings.Page />} />
           </Route>
           {isAdmin && (
-            <Route path="/admin" element={<AdminLayout />}>
+            <Route path="/admin" element={<pages.adminLayout.Page />}>
               <Route index element={<Navigate to="/admin/people" replace />} />
-              <Route path="people" element={<People />} />
-              <Route path="issue-types" element={<IssueTypes />} />
-              <Route path="workspace" element={<WorkspaceSettings />} />
+              <Route path="people" element={<pages.people.Page />} />
+              <Route path="issue-types" element={<pages.issueTypes.Page />} />
+              <Route path="workspace" element={<pages.workspaceSettings.Page />} />
             </Route>
           )}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

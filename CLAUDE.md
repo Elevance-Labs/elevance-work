@@ -141,21 +141,23 @@ behaviour).
   a dismissible banner atop the phone navigation): the browser's dialog where
   it has one, else steps from `lib/install.ts`; hidden when running installed. The worker caches the
   app's own files only, **never a Supabase response**, and stays inside its
-  own folder (sibling apps share the origin). It also shows pushes (always a
+  own folder (sibling apps share the origin). A page load is answered from
+  the stored build (the network only when nothing is stored), so a deploy
+  reaches people through `UpdatePrompt`: see §10 on migrations. It also shows pushes (always a
   notification: Safari revokes silent ones), sets the icon badge, and a tap
   only ever opens a page of this app. Icons in `public/icons/` (incl.
   `badge-96.png`, the status-bar silhouette). `index.html`'s viewport keeps
   `viewport-fit=cover` (without it iOS reports every safe-area inset as 0);
   fixed bars and sheets pad with `env(safe-area-inset-*)`.
 - **The built page locks itself down.** CSP is added at build time
-  (`vite.config.ts`); the app refuses to run framed (`main.tsx`). New external
+  (`vite.config.ts`, which also preconnects to Supabase); the app refuses to run framed (`main.tsx`). New external
   hosts go in that policy; `script-src` is never widened. No `console` in `src/`.
 
 ## 3. Layout
 
 | Path | Role |
 |---|---|
-| `src/pages/` | One file per route. Fetches its own data, owns page state. |
+| `src/pages/` | One file per route. Fetches its own data, owns page state. Every page but Home loads as its own chunk (`src/lazyPages.ts`, through `components/lazyPage`: reloads once if a deploy removed a chunk; the sidebar's pages are preloaded when idle). |
 | `src/pages/` (top) | `Work` (project cards, My issues / Recent activity, `?tab=`), Issues, Calendar, BrowseIssue, Login. |
 | `src/pages/home/` | Dashboard (Home: wide panels, or `PhoneHome` below `md`), Todos, Notes. |
 | `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Docs, Settings (incl. Features); a tab whose feature is off is hidden. `NotesRedirect` (old `/notes` links). |
@@ -170,7 +172,7 @@ behaviour).
 | `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `useReleaseHealth` / `ReleaseOutlook` (one release's judgement, shared by the release widget and the release page), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to pinned ones or not: the notes page, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
-| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
+| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `workspaceRead` (its reads; started beside `bind_profile`, kept only if read as a bound profile), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
 | `supabase/migrations/` | Ordered, timestamped changes, applied by `supabase db push`. |
 | `supabase/schema.sql` | The **whole current database** in one file. Kept in step with the migrations. |
@@ -351,7 +353,9 @@ Full detail in `supabase/schema.sql`.
 
 ## 8. How things connect
 
-- Sign-in: Google OAuth (PKCE) → `bind_profile` → `WorkspaceProvider` loads.
+- Sign-in: Google OAuth (PKCE) → `bind_profile`, with the workspace read
+  started beside it (`workspaceRead`) → `WorkspaceProvider` takes that read
+  (or reads again, e.g. on a first sign-in, before binding).
 - Issue write → `issues_guard` → row → `issues_after_write` → history, watchers,
   notifications, `chat_notify` → pg_net → `notify-chat` → project webhook
   (threadKey = issue key).
@@ -394,7 +398,8 @@ Full detail in `supabase/schema.sql`.
   trigger mirrors, project visibility on select, recorded calls, `failNext`,
   `functions.invoke`, channels). It does **not** enforce RLS — `test/sql/` does.
   Router navigations are transitions: wait for the effect (`waitFor`), not a
-  fixed delay.
+  fixed delay. `mountApp` (`test/app.tsx`) loads every lazy page first; a
+  new lazy page goes in `preloadAllPages`.
 - SQL tests (`test/sql/`): each file runs on a fresh copy of `_fixtures.sql`;
   `t.login(name)` acts as that person under `authenticated`; assertions in
   `_helpers.sql`. Vault and pg_net are stubbed (`net.calls` records calls).
@@ -410,7 +415,9 @@ Every schema change is **three edits in the same change**:
 
 1. A **new migration** in `supabase/migrations/`, `YYYYMMDDHHMMSS_<what>.sql`,
    opening with a comment that says what changes and why. Never edit a shipped
-   migration.
+   migration. It must keep the **previous build** working: the installed app
+   opens from its stored build until someone takes the update. Add first;
+   drop or rename what the old build reads in a later change.
 2. The **same end state folded into `supabase/schema.sql`**, as if it had always
    been that way. One-off data moves stay in the migration only.
 3. `src/lib/types.ts` for any column change.

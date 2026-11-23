@@ -5,9 +5,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Alert, Box, Button } from '@mui/material'
 import { useMe } from '../auth/AuthProvider'
-import { supabase } from '../lib/supabase'
 import { roleIn } from '../lib/permissions'
 import { Splash } from '../components/common'
+import { readWorkspace, takeEarlyWorkspace, type WorkspaceData } from './workspaceRead'
 import { statusesOf } from '../lib/issues'
 import type { IssueType, Profile, Project, ProjectMember, ProjectRole, ProjectStatus, Sprint } from '../lib/types'
 
@@ -31,49 +31,33 @@ interface Workspace {
 
 const WorkspaceContext = createContext<Workspace | null>(null)
 
-interface Data {
-  profiles: Profile[]
-  issueTypes: IssueType[]
-  projects: Project[]
-  statuses: ProjectStatus[]
-  memberships: ProjectMember[]
-  activeSprints: Sprint[]
-}
-
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const me = useMe()
-  const [data, setData] = useState<Data | null>(null)
+  const [data, setData] = useState<WorkspaceData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
-    const [profiles, types, projects, statuses, memberships, sprints] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, title, avatar_url, app_role, active, created_at').order('full_name'),
-      supabase.from('issue_types').select('*').order('name'),
-      supabase.from('projects').select('*').order('name'),
-      supabase.from('project_statuses').select('*').order('position'),
-      supabase.from('project_members').select('*').eq('profile_id', me.id),
-      supabase.from('sprints').select('*').eq('state', 'active'),
-    ])
-    const failed = [profiles, types, projects, statuses, memberships, sprints].find((r) => r.error)
-    if (failed?.error) {
-      setError(failed.error.message)
+    const read = await readWorkspace(me.id)
+    if ('error' in read) {
+      setError(read.error)
       return
     }
-    const levelOrder = { epic: 0, standard: 1, subtask: 2 }
     setError(null)
-    setData({
-      profiles: profiles.data as Profile[],
-      issueTypes: (types.data as IssueType[]).sort((a, b) => levelOrder[a.level] - levelOrder[b.level] || a.name.localeCompare(b.name)),
-      projects: (projects.data as Project[]).sort((a, b) => Number(!!a.archived_at) - Number(!!b.archived_at) || a.name.localeCompare(b.name)),
-      statuses: statuses.data as ProjectStatus[],
-      memberships: memberships.data as ProjectMember[],
-      activeSprints: sprints.data as Sprint[],
-    })
+    setData(read.data)
   }, [me.id])
 
+  // The first load takes the early read when it stands, else reads now.
   useEffect(() => {
-    reload()
-  }, [reload])
+    let cancelled = false
+    takeEarlyWorkspace(me.id).then((ready) => {
+      if (cancelled) return
+      if (ready) setData(ready)
+      else reload()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [me.id, reload])
 
   const value = useMemo<Workspace | null>(() => {
     if (!data) return null

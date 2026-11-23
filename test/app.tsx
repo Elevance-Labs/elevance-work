@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { CssBaseline, ThemeProvider } from '@mui/material'
 import App from '../src/App'
+import { preloadAllPages } from '../src/lazyPages'
 import { AuthProvider } from '../src/auth/AuthProvider'
 import { clearProjectMeta } from '../src/workspace/useProjectMeta'
 import { clearWidgetCache } from '../src/components/insights/useWidgetQuery'
@@ -25,6 +26,9 @@ function LocationProbe() {
 
 export async function mountApp(path = '/') {
   root?.unmount()
+  // Pages are lazy chunks: load them all first, so no check runs while one is
+  // still arriving (once loaded, a lazy page shows without a pause).
+  await preloadAllPages()
   // Project meta is cached per session; a new mount is a new session.
   clearProjectMeta()
   clearWidgetCache()

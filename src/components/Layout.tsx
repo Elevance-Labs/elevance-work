@@ -45,7 +45,7 @@ import { usePinnedViews } from '../workspace/usePinnedViews'
 import AppSwitcher from './AppSwitcher'
 import BottomNav, { BOTTOM_NAV_HEIGHT } from './BottomNav'
 import { useNavCollapsed } from './useNavCollapsed'
-import { Logo, PersonAvatar } from './common'
+import { Loading, Logo, PersonAvatar } from './common'
 import { InstallBanner, InstallNavButton } from './InstallApp'
 import NotificationsBell from './NotificationsBell'
 import ThemeModeSwitch from './ThemeModeSwitch'
@@ -370,7 +370,10 @@ export default function Layout() {
           pr: { xs: 'calc(16px + env(safe-area-inset-right))', md: 'calc(24px + env(safe-area-inset-right))' },
         }}>
           <Toolbar />
-          <Outlet />
+          {/* A page's first showing loads its chunk; the shell stays put. */}
+          <Suspense fallback={<Loading />}>
+            <Outlet />
+          </Suspense>
         </Box>
       </Box>
       {phone && <BottomNav />}

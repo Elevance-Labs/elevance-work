@@ -62,6 +62,24 @@ check('a member is offered the main areas and the issue list',
   navLabels().join() === 'Home,Calendar,Work,Todos,Notes,All issues', navLabels().join())
 check('…and no Admin button', !document.querySelector('[aria-label="Admin"]'))
 
+// The workspace is read beside bind_profile, not after it: one read of each,
+// with your memberships picked out of every visible project's.
+const workspaceReads = () => captured.selects.filter((s) => s.table === 'profiles' && s.columns.startsWith('id, email, full_name')).length
+const roleChip = () => [...document.querySelectorAll('.MuiChip-label')].map((c) => c.textContent)
+reset()
+signInAs(PEOPLE.member)
+await mountApp('/projects/WEB')
+check('the workspace is read once, started beside bind_profile', workspaceReads() === 1, workspaceReads())
+check('…its memberships read before your profile is known',
+  captured.selects.find((s) => s.table === 'project_members')?.filters.length === 0)
+check('…and only yours kept: a member of WEB, not its admin', roleChip().includes('Member') && !roleChip().includes('Admin'), roleChip().join())
+
+reset()
+signInAs(PEOPLE.member)
+failNext('project_members.select', { message: 'flaky' })
+await mountApp('/projects/WEB')
+check('an early read that failed is read again, after binding', workspaceReads() === 2 && roleChip().includes('Member'), workspaceReads())
+
 for (const path of ['/admin', '/admin/people', '/admin/issue-types', '/admin/workspace']) {
   reset()
   signInAs(PEOPLE.member)

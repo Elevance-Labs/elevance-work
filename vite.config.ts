@@ -30,6 +30,10 @@ function contentSecurityPolicy(supabaseUrl: string | undefined): Plugin {
     apply: 'build',
     transformIndexHtml: () => [
       { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: policy }, injectTo: 'head-prepend' },
+      // Open the connection to Supabase (DNS, TLS) while the scripts load and
+      // parse, rather than at the first request. crossorigin: the app's
+      // requests to it are CORS without cookies, and use that connection.
+      ...(supabase ? [{ tag: 'link', attrs: { rel: 'preconnect', href: supabase, crossorigin: 'anonymous' }, injectTo: 'head' as const }] : []),
     ],
   }
 }
@@ -52,14 +56,20 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        // MUI and drag-and-drop are big and change rarely: their own chunks cache well.
-        // (The editor is already split off: only lazily loaded modules import it.)
-        manualChunks(id) {
-          if (id.includes('node_modules/@dnd-kit')) return 'dnd'
-          if (id.includes('node_modules/@mui') || id.includes('node_modules/@emotion')) return 'mui'
-          return undefined
+        // React, MUI and drag-and-drop are big and change rarely: their own
+        // chunks cache well across deploys. A group takes its modules'
+        // dependencies along, so React, which the others depend on, is
+        // claimed first; else it rides in the dnd chunk and drag-and-drop
+        // loads with the first screen. (The editor is already split off:
+        // only lazily loaded modules import it.)
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/, priority: 3 },
+            { name: 'mui', test: /node_modules[\\/](@mui|@emotion)[\\/]/, priority: 2 },
+            { name: 'dnd', test: /node_modules[\\/]@dnd-kit[\\/]/, priority: 1 },
+          ],
         },
       },
     },
