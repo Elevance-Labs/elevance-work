@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import { COMPANY_DOMAIN } from '../lib/constants'
 import { SSO_PARAM, ssoHint } from '../lib/suite'
@@ -44,6 +44,11 @@ function takeSsoHint(): string | null {
 }
 const handedOver = takeSsoHint()
 
+// Back from Google with a code to exchange: a fresh sign-in, whose profile
+// may be bound only now. Read as the module loads, before the exchange takes
+// the code out of the address.
+const signingIn = new URLSearchParams(window.location.search).has('code')
+
 const withPrompt = (params: Record<string, string>, prompt: string | undefined) => (prompt ? { ...params, prompt } : params)
 let handOverStarted = false
 
@@ -54,6 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [binding, setBinding] = useState(false)
   const [error, setError] = useState<string | null>(readOAuthError)
   const [handOverFailed, setHandOverFailed] = useState(false)
+  // Whether the current session was restored from this device (every normal
+  // opening), not just signed in: only then can the workspace be read beside
+  // bind_profile, since its profile was bound on an earlier visit. A first
+  // sign-in binds now, and reads raced against that could come back part empty.
+  const sessionUser = useRef<string | null>(null)
+  const restored = useRef(false)
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
@@ -63,7 +74,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const returnTo = takeCalendarGrant(session)
         if (returnTo) window.location.hash = returnTo
       }
-      setUserId(session?.user.id ?? null)
+      const uid = session?.user.id ?? null
+      if (uid !== sessionUser.current) {
+        sessionUser.current = uid
+        restored.current = event === 'INITIAL_SESSION' && !signingIn
+      }
+      setUserId(uid)
       setSessionReady(true)
     })
     return () => data.subscription.unsubscribe()
@@ -104,9 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let cancelled = false
     setBinding(true)
-    // The workspace is read at the same time, not after: a profile bound on an
-    // earlier visit can already read it (the provider checks the read was).
-    readWorkspaceEarly()
+    // A restored session reads the workspace at the same time, not after: its
+    // profile is already bound (and the provider checks the read was).
+    if (restored.current) readWorkspaceEarly()
     supabase
       .rpc('bind_profile')
       .maybeSingle()

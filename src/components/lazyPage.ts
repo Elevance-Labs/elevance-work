@@ -2,7 +2,7 @@
 // the shell and Home. Installed, the service worker already holds every chunk;
 // in a tab open across a deploy, a page whose chunk the host has removed
 // reloads the app once (onto the new build) rather than showing a blank page.
-import { lazy, type ComponentType } from 'react'
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 
 const RELOADED = 'elevance.work.chunk-reload'
 
@@ -18,14 +18,14 @@ function reloadOnce(): boolean {
   return true
 }
 
-export interface LazyPage {
-  Page: ComponentType
+export interface LazyPage<T extends ComponentType<any> = ComponentType> {
+  Page: LazyExoticComponent<T>
   /** Fetch and parse the page ahead of its first showing. */
   preload: () => Promise<unknown>
 }
 
-export function lazyPage(load: () => Promise<{ default: ComponentType }>): LazyPage {
-  let loading: Promise<{ default: ComponentType }> | null = null
+export function lazyPage<T extends ComponentType<any>>(load: () => Promise<{ default: T }>): LazyPage<T> {
+  let loading: Promise<{ default: T }> | null = null
   const preload = () => {
     loading ??= load().catch((error: unknown) => {
       loading = null
@@ -48,7 +48,7 @@ type IdleWindow = Window & {
  * parsed too, so the next tap is instant. Not on the first screen's time:
  * that page's own data is loading then. Returns a cancel.
  */
-export function preloadWhenIdle(pages: LazyPage[], delay = 3000): () => void {
+export function preloadWhenIdle(pages: { preload: () => Promise<unknown> }[], delay = 3000): () => void {
   const w = window as IdleWindow
   let idle: number | null = null
   const run = () => {

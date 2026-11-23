@@ -172,7 +172,7 @@ behaviour).
 | `src/components/insights/` | The Summary's widgets, one file each (`registry` lazy-loads them; `lib/widgets` lists them), `useReleaseHealth` / `ReleaseOutlook` (one release's judgement, shared by the release widget and the release page), `WidgetFrame` (card, loads only near the screen, skeleton, error boundary), `useWidgetQuery` (per-widget load and error; a session cache keyed by project and parameters, shared requests deduped; `invalidateWidgets` after issue changes), `data` (shared narrow queries: recent finished work, status moves, open blockers, finished work for people), `parts` / `helpers` (verdict chip, period picker, links), `CustomizeDialog` (project admins). |
 | `src/components/notes/` | `NotesBoard` (list, search, filters; pinned first; an Archived view; scoped to pinned ones or not: the notes page, the dashboard), the note dialog (saves itself after a pause and on close; pin; unlink a meeting; archive, then restore or delete), `MeetingNote` (a meeting's one note, autosaved), the labels manager. |
 | `src/auth/` | `AuthProvider` — session, profile binding, `isAdmin`. |
-| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `workspaceRead` (its reads; started beside `bind_profile`, kept only if read as a bound profile), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
+| `src/workspace/` | `WorkspaceProvider` (directory, types, projects, statuses, memberships, active sprints), `workspaceRead` (its reads; on a restored session started beside `bind_profile`, kept only if read as a bound profile), `notifications` (`NotificationsProvider`), `useProjectMeta` (per-project members, fields, sprints, releases; shared cache), `useGoogleCalendar` (your own Google Calendar for a range, optionally off; connect only, no disconnect), `issueEvents` (issue-changed bus), `itemEvents` (todo / note / view-changed bus), `usePinnedViews` (your pinned saved filters; `setPinned`). |
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
 | `supabase/migrations/` | Ordered, timestamped changes, applied by `supabase db push`. |
 | `supabase/schema.sql` | The **whole current database** in one file. Kept in step with the migrations. |
@@ -353,9 +353,10 @@ Full detail in `supabase/schema.sql`.
 
 ## 8. How things connect
 
-- Sign-in: Google OAuth (PKCE) → `bind_profile`, with the workspace read
-  started beside it (`workspaceRead`) → `WorkspaceProvider` takes that read
-  (or reads again, e.g. on a first sign-in, before binding).
+- Sign-in: Google OAuth (PKCE) → `bind_profile`; a session restored from
+  the device also starts the workspace read beside it (`workspaceRead`) →
+  `WorkspaceProvider` takes that read if it was read as a bound profile, or
+  reads now (a fresh sign-in, which may be binding for the first time).
 - Issue write → `issues_guard` → row → `issues_after_write` → history, watchers,
   notifications, `chat_notify` → pg_net → `notify-chat` → project webhook
   (threadKey = issue key).
