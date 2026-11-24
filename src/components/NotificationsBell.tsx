@@ -40,7 +40,7 @@ const readSnooze = () => {
 /**
  * The header's bell: your latest notifications, newest first, unread ones
  * marked, live. Opening one shows its issue and marks it read; so does
- * opening the issue any other way.
+ * opening the issue any other way. "Clear read" deletes the read ones for good.
  *
  * While this device does not get notifications, the top of the list says so:
  * off (with Turn on), blocked (and how to allow them), or install first on an
@@ -51,7 +51,8 @@ const readSnooze = () => {
 export default function NotificationsBell() {
   const me = useMe()
   const { profileById } = useWorkspace()
-  const { items, unread, markRead, markAllRead } = useNotifications()
+  const { items, unread, markRead, markAllRead, clearRead } = useNotifications()
+  const anyRead = items.some((n) => n.read_at)
   const push = usePushDevice(me.id)
   const navigate = useNavigate()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -108,6 +109,7 @@ export default function NotificationsBell() {
         <Stack direction="row" sx={{ alignItems: 'center', px: 2, py: 1.25 }}>
           <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 600 }}>Notifications</Typography>
           <Button size="small" disabled={!unread} onClick={markAllRead}>Mark all read</Button>
+          <Button size="small" color="inherit" disabled={!anyRead} onClick={clearRead}>Clear read</Button>
         </Stack>
         <Divider />
 

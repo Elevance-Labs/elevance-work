@@ -25,13 +25,14 @@ interface NotificationsState {
   markRead: (ids: string[]) => Promise<void>
   markIssueRead: (issueId: string) => Promise<void>
   markAllRead: () => Promise<void>
+  clearRead: () => Promise<void>
 }
 
 const noop = async () => {}
 // Outside a provider (a component rendered on its own in a test) everything
 // is a harmless no-op.
 const NotificationsContext = createContext<NotificationsState>({
-  items: [], unread: 0, reload: noop, markRead: noop, markIssueRead: noop, markAllRead: noop,
+  items: [], unread: 0, reload: noop, markRead: noop, markIssueRead: noop, markAllRead: noop, clearRead: noop,
 })
 export function useNotifications() {
   return useContext(NotificationsContext)
@@ -48,6 +49,9 @@ export function useNotifications() {
  *
  * Opening an issue marks its notifications read (`markIssueRead`, called by
  * the issue view): having looked is what reading one means.
+ *
+ * Clearing (`clearRead`) deletes every read one for good — the recipient may
+ * delete their own (RLS); unread ones are never cleared.
  */
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const me = useMe()
@@ -120,9 +124,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     await supabase.from('notifications').update({ read_at: now }).eq('recipient_id', me.id).is('read_at', null)
   }, [me.id])
 
+  // Every read one, including those past the end of the feed: on screen at
+  // once, then gone from the table.
+  const clearRead = useCallback(async () => {
+    setItems((rows) => rows.filter((r) => !r.read_at))
+    await supabase.from('notifications').delete().eq('recipient_id', me.id).not('read_at', 'is', null)
+  }, [me.id])
+
   const value = useMemo(
-    () => ({ items, unread, reload, markRead, markIssueRead, markAllRead }),
-    [items, unread, reload, markRead, markIssueRead, markAllRead],
+    () => ({ items, unread, reload, markRead, markIssueRead, markAllRead, clearRead }),
+    [items, unread, reload, markRead, markIssueRead, markAllRead, clearRead],
   )
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
 }

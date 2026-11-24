@@ -275,5 +275,11 @@ await click(button('Mark all read'))
 check('mark all read updates only your unread ones', captured.updates.some((u) => u.table === 'notifications' &&
   JSON.stringify(u.filters) === '[["recipient_id","eq","p-sara"],["read_at","is",null]]'))
 check('…and the count clears', !!button('Notifications'))
+await click(button('Notifications'))
+await click(button('Clear read'))
+check('clear read deletes every read one of yours, for good', captured.deletes.some((d) => d.table === 'notifications' &&
+  JSON.stringify(d.filters) === '[["recipient_id","eq","p-sara"],["read_at","not",["is",null]]]'),
+  JSON.stringify(captured.deletes))
+check('…and they leave the list at once', !document.querySelector('.MuiPopover-paper .MuiListItemButton-root'))
 
 done()
