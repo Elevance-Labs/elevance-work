@@ -44,6 +44,7 @@ export default function App() {
             <Route path="backlog" element={<pages.backlog.Page />} />
             <Route path="board" element={<pages.board.Page />} />
             <Route path="issues" element={<pages.projectIssues.Page />} />
+            <Route path="tests" element={<pages.projectTests.Page />} />
             <Route path="releases" element={<pages.releases.Page />} />
             <Route path="releases/:releaseId" element={<pages.releaseDetail.Page />} />
             <Route path="timeline" element={<pages.timeline.Page />} />

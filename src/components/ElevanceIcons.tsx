@@ -26,3 +26,11 @@ export const PeopleIcon = createSvgIcon(
   />,
   'People',
 )
+
+export const GrowIcon = createSvgIcon(
+  <path
+    d="M112,312 L196,290 L196,382 L112,382 Z M214,232 L298,210 L298,382 L214,382 Z M316,152 L400,130 L400,382 L316,382 Z"
+    transform="scale(0.07143) translate(-88 -88)"
+  />,
+  'Grow',
+)

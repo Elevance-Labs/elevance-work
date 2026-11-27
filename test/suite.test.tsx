@@ -14,10 +14,10 @@ const DOMAIN = 'elevancelabs.com'
 
 // ---------------- where the apps are ----------------
 const links = suiteLinks('work', 'https://elevance-labs.github.io/elevance-work/')
-check('the suite is Work, Support and People', links.map((l) => l.name).join() === 'Work,Support,People')
+check('the suite is Work, Support, People and Grow', links.map((l) => l.name).join() === 'Work,Support,People,Grow')
 check('each app is the sibling folder beside this one',
   links.map((l) => l.url).join() ===
-    'https://elevance-labs.github.io/elevance-work/,https://elevance-labs.github.io/elevance-support/,https://elevance-labs.github.io/elevance-people/',
+    'https://elevance-labs.github.io/elevance-work/,https://elevance-labs.github.io/elevance-support/,https://elevance-labs.github.io/elevance-people/,https://elevance-labs.github.io/elevance-grow/',
   links.map((l) => l.url).join())
 check('only this app is marked current', links.filter((l) => l.current).map((l) => l.id).join() === 'work')
 check('an address given without its closing slash is still the folder',
@@ -72,7 +72,7 @@ check('before the app\'s own icon', banner.indexOf(opener as Element) >= 0 &&
 await click(opener)
 await settle()
 const entries = [...document.querySelectorAll('[aria-label="Elevance apps"] > *')]
-check('it lists the three apps', entries.map((e) => e.querySelector('.MuiListItemText-primary')?.textContent).join() === 'Work,Support,People',
+check('it lists the four apps', entries.map((e) => e.querySelector('.MuiListItemText-primary')?.textContent).join() === 'Work,Support,People,Grow',
   entries.map((e) => e.textContent).join(' | '))
 const here = entries.find((e) => e.getAttribute('aria-current') === 'page')
 check('this app is marked, and is not a link', here?.textContent?.includes('WorkYou are here') === true && !here.hasAttribute('href'),
@@ -80,13 +80,13 @@ check('this app is marked, and is not a link', here?.textContent?.includes('Work
 const others = entries.filter((e) => e !== here).map((e) => e.getAttribute('href') ?? '')
 const mine = encodeURIComponent(PEOPLE.member.email)
 // Where this run's build places the siblings: their folders, unless it names addresses.
-const placed = suiteLinks('work', 'http://localhost/elevance-work/', { work: import.meta.env.VITE_SUITE_WORK_URL, support: import.meta.env.VITE_SUITE_SUPPORT_URL, people: import.meta.env.VITE_SUITE_PEOPLE_URL })
+const placed = suiteLinks('work', 'http://localhost/elevance-work/', { work: import.meta.env.VITE_SUITE_WORK_URL, support: import.meta.env.VITE_SUITE_SUPPORT_URL, people: import.meta.env.VITE_SUITE_PEOPLE_URL, grow: import.meta.env.VITE_SUITE_GROW_URL })
   .filter((l) => !l.current)
   .map((l) => `${l.url}?sso=${mine}`)
 check('the others are links to the sibling apps, carrying the signed-in email',
-  others.join() === placed.join() && others.length === 2, `${others.join(' | ')} vs ${placed.join(' | ')}`)
+  others.join() === placed.join() && others.length === 3, `${others.join(' | ')} vs ${placed.join(' | ')}`)
 check('by default those are the folders beside this one',
-  suiteLinks('work', 'http://localhost/elevance-work/').filter((l) => !l.current).every((l) => /^http:\/\/localhost\/elevance-(work|support|people)\/$/.test(l.url)))
+  suiteLinks('work', 'http://localhost/elevance-work/').filter((l) => !l.current).every((l) => /^http:\/\/localhost\/elevance-(work|support|people|grow)\/$/.test(l.url)))
 
 // Installed, each app keeps to its own window: no way out to a sibling.
 setScreen({ displayMode: 'standalone' })
@@ -98,7 +98,7 @@ await mountApp('/dashboard')
 check('back in a browser tab, it returns', document.querySelector('[aria-label="Switch app"]') !== null)
 
 // ---------------- the shell: one header, one collapsible navigation ----------------
-// The three apps wear the same shell, so switching does not rearrange the screen.
+// The apps wear the same shell, so switching does not rearrange the screen.
 const toolbar = [...(document.querySelector('header .MuiToolbar-root')?.children ?? [])]
 const order = (sel: string) => toolbar.findIndex((el) => el.matches(sel) || el.querySelector(sel) !== null)
 check('the header opens with the app switcher, then the logo',
@@ -131,7 +131,7 @@ check('expanding brings the labels back', navLabels().join() === labelsBefore.jo
 check('and that is remembered too', window.localStorage.getItem('elevance.nav-collapsed') === '0')
 
 // ---------------- the theme: light, dark or the device's ----------------
-// Chosen in the account menu; remembered under one key the three apps share.
+// Chosen in the account menu; remembered under one key the apps share.
 const bodyBg = () => window.getComputedStyle(document.body).backgroundColor
 const themeButtons = () => [...document.querySelectorAll<HTMLElement>('[aria-labelledby="theme-mode-label"] button')]
 const pressed = () => themeButtons().find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent

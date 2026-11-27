@@ -32,6 +32,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuIcon from '@mui/icons-material/Menu'
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined'
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import SearchIcon from '@mui/icons-material/Search'
@@ -60,6 +61,7 @@ const CreateIssueDialog = lazy(() => import('./CreateIssueDialog'))
 const SearchDialog = lazy(() => import('./SearchDialog'))
 const CreateMenu = lazy(() => import('./CreateMenu'))
 const NotificationSettings = lazy(() => import('./NotificationSettings'))
+const ApiTokensDialog = lazy(() => import('./ApiTokens'))
 
 // The same sizes as the other Elevance apps.
 const DRAWER_WIDTH = 248
@@ -128,6 +130,7 @@ export default function Layout() {
   const [choosing, setChoosing] = useState(false)
   const [create, setCreate] = useState<CreateDefaults | null>(null)
   const [notificationSettings, setNotificationSettings] = useState(false)
+  const [apiTokens, setApiTokens] = useState(false)
   const openIssue = new URLSearchParams(search).get('issue')
 
   // Cmd/Ctrl+S searches (instead of saving the page); Cmd/Ctrl+K creates.
@@ -335,6 +338,17 @@ export default function Layout() {
               <MenuItem
                 onClick={() => {
                   setUserMenu(null)
+                  setApiTokens(true)
+                }}
+              >
+                <ListItemIcon>
+                  <KeyOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                API tokens
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setUserMenu(null)
                   signOut()
                 }}
               >
@@ -383,6 +397,7 @@ export default function Layout() {
         {searching && <SearchDialog onClose={() => setSearching(false)} />}
         {choosing && <CreateMenu onIssue={() => setCreate({})} onClose={() => setChoosing(false)} />}
         {notificationSettings && <NotificationSettings onClose={() => setNotificationSettings(false)} />}
+        {apiTokens && <ApiTokensDialog onClose={() => setApiTokens(false)} />}
       </Suspense>
     </LayoutContext.Provider>
   )

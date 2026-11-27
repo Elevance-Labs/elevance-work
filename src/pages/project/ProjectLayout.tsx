@@ -40,6 +40,7 @@ export default function ProjectLayout() {
     ...(on('timeline') ? [{ to: `${base}/timeline`, label: 'Timeline' }] : []),
     ...(on('calendar') ? [{ to: `${base}/calendar`, label: 'Calendar' }] : []),
     ...(on('issues') ? [{ to: `${base}/issues`, label: 'Issues' }] : []),
+    { to: `${base}/tests`, label: 'Tests' },
     ...(on('releases') ? [{ to: `${base}/releases`, label: 'Releases' }] : []),
     ...(on('docs') ? [{ to: `${base}/docs`, label: 'Docs' }] : []),
     ...(can.manageProject(role) ? [{ to: `${base}/settings`, label: 'Settings' }] : []),

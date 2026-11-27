@@ -1,6 +1,6 @@
 // A project's settings, for its admins: details, the features it uses,
-// people, workflow, custom fields, its Google Chat space, and archiving or
-// deleting it.
+// people, workflow, custom fields, test case lists, its Google Chat space,
+// and archiving or deleting it.
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -11,6 +11,7 @@ import {
   ButtonBase,
   Checkbox,
   Chip,
+  Divider,
   FormControlLabel,
   FormGroup,
   IconButton,
@@ -62,10 +63,11 @@ import { useWorkspace } from '../../workspace/WorkspaceProvider'
 import { invalidateProjectMeta, useProjectMeta } from '../../workspace/useProjectMeta'
 import { ConfirmDialog, FormDialog, Loading, PersonName } from '../../components/common'
 import { PersonPicker } from '../../components/pickers'
+import { TokenManager } from '../../components/ApiTokens'
 import { FEATURES, canDisable, featureOn, withFeature } from '../../lib/projectFeatures'
 import { useProject } from './projectContext'
 
-type TabKey = 'details' | 'features' | 'people' | 'workflow' | 'fields' | 'chat' | 'danger'
+type TabKey = 'details' | 'features' | 'people' | 'workflow' | 'fields' | 'tests' | 'chat' | 'danger'
 
 const FIELD_KIND_LABELS: Record<FieldKind, string> = {
   text: 'Text',
@@ -434,6 +436,66 @@ function Fields() {
   )
 }
 
+/** A list typed as chips: Enter adds, the chip's cross removes; spelt as typed. */
+function ListInput({ label, value, onChange, helperText }: { label: string; value: string[]; onChange: (v: string[]) => void; helperText: string }) {
+  return (
+    <Autocomplete
+      multiple
+      freeSolo
+      options={[]}
+      value={value}
+      onChange={(_, items) => {
+        const out: string[] = []
+        for (const raw of items) {
+          const item = raw.trim().replace(/\s+/g, ' ').slice(0, 40)
+          if (item && !out.some((x) => x.toLowerCase() === item.toLowerCase())) out.push(item)
+        }
+        onChange(out)
+      }}
+      renderValue={(items, getItemProps) =>
+        items.map((item, index) => {
+          const { key, ...itemProps } = getItemProps({ index })
+          return <Chip key={key} {...itemProps} size="small" label={item} />
+        })
+      }
+      renderInput={(params) => <TextField {...params} label={label} placeholder="Type and press Enter" helperText={helperText} />}
+    />
+  )
+}
+
+function Tests() {
+  const { project } = useProject()
+  const { reload } = useWorkspace()
+  const [types, setTypes] = useState(project.test_types)
+  const [levels, setLevels] = useState(project.test_levels)
+  const [environments, setEnvironments] = useState(project.test_environments)
+  const s = useSaver()
+
+  async function save() {
+    const values = { test_types: types, test_levels: levels, test_environments: environments }
+    if (await s.run(() => supabase.from('projects').update(values).eq('id', project.id))) await reload()
+  }
+
+  return (
+    <Stack spacing={2.5} sx={{ maxWidth: 640 }}>
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        What this project's test cases can be. A case keeps a type or level taken off the list; it just can't be chosen again.
+      </Typography>
+      <ListInput label="Types" value={types} onChange={setTypes} helperText="Functional, UI, Negative…" />
+      <ListInput label="Levels" value={levels} onChange={setLevels}
+        helperText="Smoke, Regression…: a level is what a run picks its cases by." />
+      <ListInput label="Environments" value={environments} onChange={setEnvironments}
+        helperText="Where results are recorded: Local, Dev, Staging, Prod…" />
+      {s.error && <Alert severity="error">{s.error}</Alert>}
+      {s.saved && <Alert severity="success">Saved.</Alert>}
+      <Box><Button variant="contained" onClick={save} loading={s.busy}>Save</Button></Box>
+      <Divider sx={{ pt: 1 }} />
+      <Typography variant="subtitle1">CI tokens</Typography>
+      <TokenManager projectId={project.id} ci />
+    </Stack>
+  )
+}
+
 const ALL_CHAT_EVENTS = Object.keys(CHAT_EVENT_LABELS) as ChatEvent[]
 
 function Chat() {
@@ -540,7 +602,8 @@ export default function ProjectSettings() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as TabKey) || 'details'
   const tabs: [TabKey, string][] = [
-    ['details', 'Details'], ['features', 'Features'], ['people', 'People'], ['workflow', 'Workflow'], ['fields', 'Fields'], ['chat', 'Google Chat'], ['danger', 'Archive & delete'],
+    ['details', 'Details'], ['features', 'Features'], ['people', 'People'], ['workflow', 'Workflow'], ['fields', 'Fields'], ['tests', 'Tests'],
+    ['chat', 'Google Chat'], ['danger', 'Archive & delete'],
   ]
   return (
     <Box>
@@ -552,6 +615,7 @@ export default function ProjectSettings() {
       {tab === 'people' && <People />}
       {tab === 'workflow' && <Workflow />}
       {tab === 'fields' && <Fields />}
+      {tab === 'tests' && <Tests />}
       {tab === 'chat' && <Chat />}
       {tab === 'danger' && <Danger />}
     </Box>

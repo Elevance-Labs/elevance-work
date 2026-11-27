@@ -212,7 +212,7 @@ check('…then its file goes to Drive with the comment', commentUpload?.get('iss
   !!savedComment && commentUpload?.get('comment_id') === savedComment.id, JSON.stringify([...(commentUpload?.entries() ?? [])]))
 const withComment = dialog()?.querySelector('[role="group"][aria-label="Files with this comment"]')
 check('…and shows under the comment', withComment?.textContent?.includes('hero-sizes.png') &&
-  !!dialog()?.querySelector('table th')?.textContent?.includes('Size'))
+  [...dialog()!.querySelectorAll('table th')].some((th) => th.textContent?.includes('Size')))
 check('…as well as with the issue’s attachments', dialog()?.textContent?.includes('in a comment'))
 
 // Sub-tasks
@@ -255,7 +255,8 @@ check('…but only Google links', dialog()?.textContent?.includes('Paste a link 
 await mountApp('/projects/WEB/issues?issue=WEB-6')
 await settleLazy()
 check('an issue with nothing yet is the title, a row of buttons, the description and comments',
-  await waitFor(() => quick() === 'Add sub-task,Link issue,Attach,Add doc,Add todo'), quick())
+  await waitFor(() => quick() === 'Add sub-task,Link issue,Add test cases,Attach,Add doc,Add todo'), quick())
+check('…its test cases folded away too', !dialog()?.querySelector('table[role="grid"]'))
 check('…its empty todos folded away too', !!labelled('New todo', dialog()!)?.closest('[hidden]'))
 await click(button('Add todo', dialog()!))
 check('…Add todo opens them, the bar focused', !labelled('New todo', dialog()!)?.closest('[hidden]') && document.activeElement === labelled('New todo', dialog()!))

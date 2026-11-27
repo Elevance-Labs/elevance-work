@@ -30,6 +30,10 @@ export const can = {
   /** Settings: the project, people, workflow, fields, integrations, features, the Summary's widgets. */
   manageProject: (role: ProjectRole | null) => role === 'admin',
   addDocs: edits,
+  /** Write test cases and record their results (viewers read them). */
+  editTests: edits,
+  /** Delete a test run and its results. */
+  deleteRuns: manages,
   /** A comment's author edits it; its author or a project admin or manager removes it. */
   editComment: (authorId: string | null, me: Profile) => authorId === me.id,
   deleteComment: (authorId: string | null, me: Profile, role: ProjectRole | null) => authorId === me.id || manages(role),

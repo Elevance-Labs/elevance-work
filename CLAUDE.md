@@ -19,6 +19,11 @@ behaviour).
   who approve or reject, locked once approved; the Summary's outlook beside), **summary** (project intelligence: widgets a
   project's admins choose, incl. the classic reports; no Reports tab), **docs** (Google Drive),
   **project features** (admins turn off Timeline, Calendar, Issues, Board, Releases, Docs),
+  **tests** (each project's end-to-end test cases, `WEB-T12`, edited as a
+  spreadsheet; grouped by type, level, area or issue; manual results per
+  environment; also on their issue; always on, not a feature; written by AI
+  tools, the Playwright reporter and CI through `qa-api` with API tokens:
+  runs, script links, a case's history),
   **issue lists and saved filters** (pinned to the navigation per person), **calendar** (meetings only from each
   person's own Google Calendar, read-only; beside them epics, issues,
   releases and todos; no app-made events; release dates pushed to the
@@ -63,6 +68,11 @@ behaviour).
   `issues_after_write` writes history, watchers, notifications and Chat calls,
   and posts a flag's change as a comment by the actor (whose own trigger
   notifies).
+  `test_cases_guard` numbers test cases (`KEY-T<n>`) and checks type, level
+  and issue against the project; `test_results_guard` fills the result's
+  project and author and wants a reason for a fail or block;
+  `test_results_after_write` copies the latest result onto its case
+  (`last_*`, never client-writable).
   A save's notifications go through `notify_people`: one statement (one
   `push-send` call per save), one per person (assigned > mentioned > status
   changed > commented; the save's new status in `detail`), as in Support.
@@ -78,16 +88,22 @@ behaviour).
   `project_statuses_reorder` / `fields_reorder`; leaving someone else's
   todo only by `todo_leave`; where a todo sits in your lists only by
   `todo_move` (`todo_places` has no client writes); ranks renumber via
-  `project_rerank`; a release approver's decision only by `release_decide`,
+  `project_rerank` (test cases: `test_cases_rerank`); a release approver's decision only by `release_decide`,
   and back to pending by `release_request_approval` or an issue moving in or
   out of the release (`issues_release_changed`). `release_approvers_guard` and
   `releases_guard` keep an approved release locked and unreleasable until
-  every approver approved.
+  every approver approved. A test result is never updated, only added or
+  (its recorder's) deleted.
 - **Some rows are written only by Edge Functions (service role).**
   `calendar_connections` (no client grants at all: encrypted Google refresh
   tokens, used only for their owner's own calendar), `attachments`,
   `projects.drive_folder_id`, `releases.google_event_id`, documents with a `drive_file_id`, and
-  `issue_dev_links` (the `github` function; no client write grants). History
+  `issue_dev_links` (the `github` function; no client write grants),
+  `test_runs` and the results in them, a case's script link, and cases or
+  results named for a token's person (the `qa-api` function: the triggers
+  take the author it names only when nobody is signed in). `api_tokens`
+  only through `api_token_create` / `api_token_revoke` (only a hash is
+  kept; `qa_token_use` / `qa_role` are the function's alone). History
   (`issue_events`), `sprint_issues` and `notifications` only by triggers / RPCs
   (`send_test_notification` is the one a person causes, to themselves).
   `push_subscriptions` only through `save_push_subscription` (which also hands
@@ -111,12 +127,12 @@ behaviour).
 - **Stored HTML is untrusted.** Descriptions and comments are sanitised on save
   and on render (`lib/richText.ts`); only mention spans keep data attributes.
   Chat text is escaped in `notify-chat`.
-- **One shell, three apps.** The theme (indigo, Roboto, bold `h5` titles) and
+- **One shell, four apps.** The theme (indigo, Roboto, bold `h5` titles) and
   the layout (header: switcher, logo, account button with name and role;
   tinted current page; navigation that folds to a rail from **Collapse** at its
   foot, via `components/useNavCollapsed`, one localStorage key shared by the
   apps; the first load is the app's icon over a running bar, `Splash` in `components/common`)
-  match Work, Support and People. A change to either belongs in all three.
+  match Work, Support, People and Grow. A change to either belongs in all four.
   One exception for now: the phone bottom bar (`components/BottomNav`) and
   the Admin header button are Work's alone, to move to the siblings once
   settled.
@@ -128,8 +144,8 @@ behaviour).
   `divider`, `text.*`); a fixed hex is for brand or data only, and a tint that
   must differ by mode uses `applyStyles('dark', …)` or `palette.mode`
   (note colours carry a dark shade in `lib/notes.ts`).
-- **One of three apps.** `lib/suite.ts` lists the suite (Work, Support,
-  People), where each lives (the sibling folder, or `VITE_SUITE_*_URL`) and the
+- **One of four apps.** `lib/suite.ts` lists the suite (Work, Support,
+  People, Grow), where each lives (the sibling folder, or `VITE_SUITE_*_URL`) and the
   `?sso=<company email>` hand-over; `components/AppSwitcher` is the grid icon
   before the logo, hidden when running installed (`components/useStandalone`). `AuthProvider` takes the hint once at load, strips it from
   the address and, with no session, goes to Google with `login_hint` and no
@@ -160,12 +176,13 @@ behaviour).
 | `src/pages/` | One file per route. Fetches its own data, owns page state. Every page but Home loads as its own chunk (`src/lazyPages.ts`, through `components/lazyPage`: reloads once if a deploy removed a chunk; the sidebar's pages are preloaded when idle). |
 | `src/pages/` (top) | `Work` (project cards, My issues / Recent activity, `?tab=`), Issues, Calendar, BrowseIssue, Login. |
 | `src/pages/home/` | Dashboard (Home: wide panels, or `PhoneHome` below `md`), Todos, Notes. |
-| `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Releases, ReleaseDetail, Docs, Settings (incl. Features); a tab whose feature is off is hidden. `NotesRedirect` (old `/notes` links). |
+| `src/pages/project/` | `ProjectLayout` (header, tabs, project context) and its tabs: Summary, Backlog, Board, Timeline, Calendar (`ProjectCalendar`), Issues, Tests, Releases, ReleaseDetail, Docs, Settings (incl. Features and the test lists); a tab whose feature is off is hidden. `NotesRedirect` (old `/notes` links). |
 | `src/pages/admin/` | `AdminLayout` (tabs) over People, issue types, workspace settings (workspace admins). |
 | `src/components/` | Shell (`Layout`; `BottomNav`, the phone's four tabs), `IssueRow` (one issue on a line, optional second line), `AssigneeFilter` (the avatar quick filter, board and backlog), `CreateProject`, `NotificationsBell` (feed; offers device notifications, says when they stopped), `NotificationSettings` (account menu: this device on / off / test, your devices), `usePushDevice` (this device's real state, checked with the server; `forgetPushDevice` on sign-out), `InstallApp` (install button, phone banner, steps), issue view, create dialog, pickers, cards, charts, docs list, rich text, `TodoList` (one view of a todo store: a list or smart view, what's due, or one issue's; the project and list pickers), `ThemeModeSwitch` (account menu: light / dark / system), `SearchDialog` (Cmd/Ctrl+S), `CreateMenu` (the Create button and Cmd/Ctrl+K: 1 issue, 2 todo, 3 note). |
 | `src/components/home/` | Home's parts: `useAgenda` (meetings, releases, issues and todos due, overdue, noted meetings, ticking), `AgendaRow`, `NowPanel` / `NowCard` (the meeting now, wide / phone), `PhoneHome` (date line, meeting card with its note in a sheet, seven-day strip `?date=`, the day's agenda). |
 | `src/components/calendar/` | `CalendarView` (week / day / month, layers, period in the URL; the Calendar page and the project tab), `ItemDialogs` (a meeting with its guests and note, a release, a todo), `useItemDialog` (what a click opens: always a dialog; an issue via `?issue=`). |
-| `src/components/issue/` | `Flag` (the reason dialog, the flag button beside the issue's title: lit when flagged, opens why, edit, remove) and `flagging` (saving a flag, a card menu's Flag group, `flaggedSx`: the tint every list gives a flagged issue; `FlagMark` in `IssueBits` is its icon). The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files and thumbs up / down), history, attachments (`AttachmentList`, shared with comments), relations (children, links), development (GitHub links, read-only). |
+| `src/components/issue/` | `Flag` (the reason dialog, the flag button beside the issue's title: lit when flagged, opens why, edit, remove) and `flagging` (saving a flag, a card menu's Flag group, `flaggedSx`: the tint every list gives a flagged issue; `FlagMark` in `IssueBits` is its icon). The issue view (empty sections fold into quick-add buttons under the title; two columns from `lg` in the dialog and side panel alike, else one column in reading order; on a phone or in the side panel then a fixed top bar and comments / history as a sheet pinned to the foot; an unsaved description is kept as a draft, `lib/drafts`) and its parts: comments (with their files and thumbs up / down), history, attachments (`AttachmentList`, shared with comments), relations (children, links), test cases (the issue's own sheet; folded like the other sections while empty), development (GitHub links, read-only). |
+| `src/components/tests/` | `TestSheet` (the spreadsheet: selection, keys, copy / paste as TSV, undo, drag to reorder, statuses, group headers, the Automated column; rows keyed by group and id, since a case can be in several area groups; focus kept in a hidden textarea), `editors` (text, choice, areas over a cell), `TestBits` (status pill, counts bar, environment select, a case's history: results with their runs, and changes), `Runs` (the Tests tab's runs and a run's results), `useTestCases` (load, Realtime, optimistic writes with temporary ids), `useEnvironment` (per project, in localStorage). `components/ApiTokens` is the token manager: account menu → API tokens (yours), project settings → Tests (CI tokens). |
 | `src/components/todos/` | `TodoComposer` (the one-line add bar: icons for due day, issue, project, people, list that become chips; busy while saving, so Enter adds once), `TodoBits` (due-day and list menus), `useTodos` (load and write; filing through `todo_move`), `useTodoLists` (your lists). |
 | `src/components/backlog/` | `Epics`: the backlog's Epics panel (filter by epic, open one, drop rows to move them there, create an epic), a row's epic chip, the menu that sets or removes it (one issue or a selection). |
 | `src/components/releases/` | The release page's parts: `ReleaseNotesCard` (the notes on top: view, write with a draft from done issues, copy, Google Doc), `ApprovalPanel` (approvers, approve / reject, ask again). |
@@ -176,7 +193,7 @@ behaviour).
 | `src/lib/` | Pure rules and the Supabase client (see §6). |
 | `supabase/migrations/` | Ordered, timestamped changes, applied by `supabase db push`. |
 | `supabase/schema.sql` | The **whole current database** in one file. Kept in step with the migrations. |
-| `supabase/functions/` | Edge Functions: `drive`, `google-calendar`, `notify-chat`, `calendar-sync`, `github` (GitHub's webhook; its `parse.ts` is pure and read by the browser tests), `push-send` (Web Push; `webpush.ts` and `message.ts` are pure and read by the browser tests); `_shared/google.ts`. |
+| `supabase/functions/` | Edge Functions: `drive`, `google-calendar`, `notify-chat`, `calendar-sync`, `github` (GitHub's webhook; its `parse.ts` is pure and read by the browser tests), `push-send` (Web Push; `webpush.ts` and `message.ts` are pure and read by the browser tests), `qa-api` (AI tools, the Playwright reporter and CI, by API token, no JWT: `mcp.ts` the MCP server and tool list, `ops.ts` the tools over a minimal `Db`, `markdown.ts` an issue as Markdown; all read by the browser tests, `ops` on the mock); `_shared/google.ts`. |
 | `scripts/` | `check-schema.sh`, `test-sql.sh`, `pg-sandbox.sh` (throwaway Postgres), `vapid-keys.mjs`. |
 | `test/` | Browser tests (jsdom + in-memory Supabase mock) and `test/sql/` (database tests). |
 | `.github/workflows/deploy.yml` | Lint, typecheck, tests, SQL tests, schema check, build, deploy. |
@@ -189,7 +206,8 @@ behaviour).
   (`?view=day|week&date=`, or `?month=`; week by default), `/todos` (`?list=inbox|today|tomorrow|week|<list id>`), `/notes` (`?q=&label=&color=&project=&archived=1`; `?note=ID` opens one),
   `/browse/:key` — everyone. `/projects` redirects to `/work`.
 - `/projects/:key` → Summary; `/backlog` (Scrum only; Kanban redirects to
-  board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`, `/releases`, `/releases/:releaseId`,
+  board), `/board`, `/timeline`, `/calendar` (as `/calendar`), `/issues`,
+  `/tests` (`?q=&type=&level=&status=&area=&for=ISSUE-KEY&group=type|level|area|issue`; `for`, since `?issue=` opens the issue; `?view=runs` the runs), `/releases`, `/releases/:releaseId`,
   `/docs`, `/settings` (`?tab=`; project admins,
   others redirected). A tab whose feature is off redirects to Summary (`lib/projectFeatures`).
   `/reports` redirects to Summary, `/notes` to `/notes?project=<id>`. A project RLS hides reads as "no project you can see".
@@ -224,7 +242,7 @@ behaviour).
 | `layoutContext` | `useLayout().openCreate` | Inside `Layout` |
 
 - Other people's changes arrive by Supabase Realtime on the board
-  (`issues`) and the bell (`notifications`).
+  (`issues`), the test sheet (`test_cases`) and the bell (`notifications`).
 
 ## 6. Modules (`src/lib/`)
 
@@ -267,6 +285,12 @@ behaviour).
 - `timeline.ts` — the epic timeline: rows (an epic's own dates, or borrowed
   from its issues), the window of months drawn, placing a bar, dragging one.
 - `devLinks.ts` — ordering an issue's GitHub links.
+- `testCases.ts` — the sheet's columns, cell text and parsing (values matched
+  to the project's lists, areas, statuses, issue refs), TSV in and out, header
+  rows recognised by name, the filter (URL form), counts, grouping
+  (`groupTestCases`), runs' counts / duration / runner, script labels.
+- `qaApi.ts` — the `qa-api` address, the `.mcp.json` and shell lines shown
+  with a new token, token scope and expiry choices.
 - `calendar.ts` — month grid, week days, the day timeline's blocks (`timedBlocks`), issues dated in a range
   (`datedWithin`), merging meetings / epics / issues / releases / todos (`calendarItems`), the meeting now
   (`currentMeeting`), a meeting's day and when.
@@ -306,6 +330,8 @@ Full detail in `supabase/schema.sql`.
   `disabled_features` (checked: known names, not both Issues and Board) and
   `summary_widgets` (keys' shape only; null = the kind's default), both
   project admins'. Off only hides: data and access are unchanged.
+  `test_counter` and the test lists (types, levels, environments; admins
+  edit, `clean_list` tidies).
 - `project_statuses` — a project's workflow (position, category, WIP limit).
 - `issue_types` — workspace-wide; `level` epic / standard / subtask.
 - `fields` — a project's custom fields; values in `issues.custom` keyed by id.
@@ -329,6 +355,19 @@ Full detail in `supabase/schema.sql`.
   `documents`;
   `issue_dev_links` — GitHub branches, commits and pull requests naming the
   issue's key; read through `can_view_issue`, written only by `github`.
+- `test_cases` — a project's end-to-end cases (`KEY-T<n>`), optionally an
+  issue (kept if it goes), `rank`, the latest result copied in (`last_*`);
+  `test_results` — status, reason, environment, `source` (manual, or
+  automated through `qa-api`), recorder, and for a run's: duration, error,
+  artifact link, attempts, flaky. Whoever edits the project writes, viewers
+  read (`can_view_project` / `can_edit_project`). A case also has
+  `updated_by`, its script link (`script_*`, `automated_at`) and a
+  transient `change_reason`; `test_case_events` is its history (field,
+  from / to, actor, app or api, reason; by trigger). `test_runs` — a run
+  (`KEY-R<n>`) on one environment, `local` (someone's) or `cloud`, repo /
+  branch / commit / CI link, counts by trigger; only `qa-api` writes,
+  managers delete. `api_tokens` — a person's (optionally one project) or a
+  project's CI token (its admins'); hash, prefix, scopes, expiry, revoked.
 - `calendar_connections` — per person, service role only,
   dropped on deactivation; `todos` — the owner and `shared_with` people
   read and edit, only the owner deletes, leaving is `todo_leave`; `todos_guard`
@@ -377,6 +416,11 @@ Full detail in `supabase/schema.sql`.
 - Release write → `releases_after_write` → pg_net → `calendar-sync` → the company
   Google Calendar (event ids derived from row ids) → writes back `google_event_id`
   (which doesn't re-trigger). `calendar-sync` also removes copies of the retired app events.
+- QA tools: Claude Code (MCP), the Playwright reporter or CI → `qa-api`
+  (Bearer API token, no JWT) → `qa_token_use` (hash, expiry, revoked, owner
+  active) → `qa_role` per project → service-role writes naming the token's
+  person → the usual triggers (lists, reasons, numbering, history, latest
+  result, run counts) → the sheet live by Realtime (`test_cases`).
 - GitHub: organisation webhook → `github` function (HMAC signature, no JWT)
   → keys found in branch names, commit messages, PR titles → upserts
   `issue_dev_links` for keys that are issues → issue view's Development.

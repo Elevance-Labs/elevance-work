@@ -29,6 +29,7 @@ import {
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import AddLinkIcon from '@mui/icons-material/AddLink'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import CheckIcon from '@mui/icons-material/Check'
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined'
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
@@ -71,13 +72,14 @@ import { RichTextEditor } from '../RichText'
 import { RichTextView } from '../RichTextView'
 import Attachments from './Attachments'
 import Development from './Development'
+import IssueTestCases from './TestCases'
 import Comments from './Comments'
 import { FlagButton, FlagDialog } from './Flag'
 import History from './History'
 import { Children, Links, type LinkedIssue } from './Relations'
 
 /** The sections that fold away while empty, each with its quick-add button. */
-type QuickAdd = 'children' | 'links' | 'attach' | 'docs' | 'todos'
+type QuickAdd = 'children' | 'links' | 'tests' | 'attach' | 'docs' | 'todos'
 interface QuickButton {
   key: QuickAdd
   label: string
@@ -207,14 +209,16 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
 
   // Empty sections stay folded into the quick-add buttons until one is asked for.
   const [revealed, setRevealed] = useState<QuickAdd[]>([])
-  // The todos load themselves; null until they have.
+  // The todos load themselves; null until they have. So do the test cases.
   const [todoCount, setTodoCount] = useState<number | null>(null)
+  const [testCount, setTestCount] = useState<number | null>(null)
   const { openCreate } = useLayout()
 
   useEffect(() => {
     setData(undefined)
     setRevealed([])
     setTodoCount(null)
+    setTestCount(null)
     reload()
   }, [reload])
 
@@ -270,6 +274,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
     links: data.links.length > 0,
     attach: data.attachments.length > 0,
     docs: data.docs.length > 0,
+    tests: !!testCount,
     todos: !!todoCount,
   }
   const show = (k: QuickAdd) => has[k] || revealed.includes(k)
@@ -285,6 +290,7 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
         : reveal('children'),
     },
     editable && { key: 'links', label: 'Link issue', icon: <AddLinkIcon />, onClick: reveal('links') },
+    can.editTests(role) && testCount === 0 && { key: 'tests', label: 'Add test cases', icon: <FactCheckOutlinedIcon />, onClick: reveal('tests') },
     editable && { key: 'attach', label: 'Attach', icon: <AttachFileIcon />, htmlFor: attachInputId },
     can.addDocs(role) && { key: 'docs', label: 'Add doc', icon: <DescriptionOutlinedIcon />, onClick: reveal('docs') },
     todoCount === 0 && { key: 'todos', label: 'Add todo', icon: <ChecklistOutlinedIcon />, onClick: reveal('todos') },
@@ -790,6 +796,9 @@ export default function IssueView({ issueKey, onClose, panel = false, viewMode, 
         <Links issue={issue} links={data.links} role={role} startAdding={revealed.includes('links')}
           onChange={(links) => setData((d) => d && { ...d, links })} />
       )}
+      {/* Mounted while folded away, to know whether there are any. */}
+      <IssueTestCases key={issue.id} issue={issue} project={project} role={role} shown={show('tests')}
+        autoStart={revealed.includes('tests')} onCount={setTestCount} />
       <Development links={data.devLinks} />
       <Attachments issueId={issue.id} attachments={data.attachments} role={role} inputId={attachInputId} collapsed={!show('attach')}
         onChange={(attachments) => setData((d) => d && { ...d, attachments })} />

@@ -20,10 +20,11 @@ People** (`el-people`), on the same stack.
 |---|---|
 | **Projects** | Scrum (backlog and sprints) or Kanban (continuous flow). Each has a key (`WEB`), so issues are `WEB-1`, `WEB-2`… Private (members only) or open (everyone can read and comment). |
 | **Issues** | Types by level: **epic** › **standard** (story, task, bug…) › **sub-task**. Status, assignee, reporter, priority, story points, labels, start and due dates, sprint, release, parent, and the project's **custom fields** (text, number, date, choice, multi-choice, person, link, checkbox; optionally required, optionally per type). **Flag** an issue that is held up, with a reason (the flag beside the issue's title, or a board or backlog card's menu), as in Jira: it is tinted amber and marked with a red flag wherever it is listed (board, backlog, Issues list, Home, Work, timeline, calendar, search), the flag beside its title lights up (click it for the reason, who flagged it and when, to edit the reason or remove the flag), each change is posted as a comment by whoever made it, and it leads the Summary's *Needs attention*. |
-| **Issue view** | Opens over any page (`?issue=WEB-12`, shareable) or as its own page (`/browse/WEB-12`). Edit any field in place (the type from its icon and the epic or parent from the breadcrumb, as in Jira), rich-text description (with tables), sub-tasks, an epic's issues, links (blocks / relates / duplicates / clones), **Development** (the GitHub pull requests, branches and commits that name the issue), attachments, Google Docs, **todos** (yours and the ones you're on, tied to the issue; add one there), comments with **@mentions**, tables and files (give one a **thumbs up or down**: one each, the other switches, the same again takes it back; hover for who; nobody is notified), full history, watch / unwatch. Sections with nothing in them stay out of the way: a row of buttons under the title (**Add sub-task** or **Add issue**, **Link issue**, **Attach**, **Add doc**, **Add todo**) opens one ready to add to, as in Jira. A description you were typing but didn't save is kept in your browser: open the description again and it's there, until you **Save** or **Cancel**. The **Release** field says how many days the release has left (or how late it is). On a computer, the window icon in the issue's header chooses whether issues open as a **dialog** or a **side panel** on the right that leaves the page usable (open another issue and it takes its place; click anywhere else or press Esc to close it, as with the dialog); the choice is saved on your profile. On a phone an issue is always full screen, one column in reading order (key and actions in a bar that stays put, then the title, those buttons, status, description, what's attached and the other fields), with **Comments** and **History** as tabs pinned to the foot: tap one to slide it up over the issue, tap it again or the floating button to fold it away. On a desktop the dialog and the side panel both show the issue with its fields beside it; on a tablet they are one column too (the side panel with the pinned tabs). |
+| **Issue view** | Opens over any page (`?issue=WEB-12`, shareable) or as its own page (`/browse/WEB-12`). Edit any field in place (the type from its icon and the epic or parent from the breadcrumb, as in Jira), rich-text description (with tables), sub-tasks, an epic's issues, links (blocks / relates / duplicates / clones), **Development** (the GitHub pull requests, branches and commits that name the issue), its **test cases** and their results, attachments, Google Docs, **todos** (yours and the ones you're on, tied to the issue; add one there), comments with **@mentions**, tables and files (give one a **thumbs up or down**: one each, the other switches, the same again takes it back; hover for who; nobody is notified), full history, watch / unwatch. Sections with nothing in them stay out of the way: a row of buttons under the title (**Add sub-task** or **Add issue**, **Link issue**, **Attach**, **Add doc**, **Add todo**) opens one ready to add to, as in Jira. A description you were typing but didn't save is kept in your browser: open the description again and it's there, until you **Save** or **Cancel**. The **Release** field says how many days the release has left (or how late it is). On a computer, the window icon in the issue's header chooses whether issues open as a **dialog** or a **side panel** on the right that leaves the page usable (open another issue and it takes its place; click anywhere else or press Esc to close it, as with the dialog); the choice is saved on your profile. On a phone an issue is always full screen, one column in reading order (key and actions in a bar that stays put, then the title, those buttons, status, description, what's attached and the other fields), with **Comments** and **History** as tabs pinned to the foot: tap one to slide it up over the issue, tap it again or the floating button to fold it away. On a desktop the dialog and the side panel both show the issue with its fields beside it; on a tablet they are one column too (the side panel with the pinned tabs). |
 | **Board** | A column per status in workflow order, WIP limits, drag and drop (mouse, touch, keyboard) or each card's *Move to* menu, quick filters (incl. *Flagged*), swimlanes by assignee or epic, live updates as others move cards. Scrum: the active sprint. Kanban: everything open, plus the last two weeks' done. |
 | **Timeline** | A project's epics against the calendar: a bar from each epic's start to its due date, shaded by how much of it is done, with its issues underneath on request and the project's sprints and releases marked along the top (each release by name, from its start to its date, with a line down the timeline on its day; click one to open it). A project with releases but no epics still gets a timeline. Weeks, months or quarters. People who can edit **drag a bar to move it, or an end to change one date** (or use the arrow keys: Shift for the due date, Alt for the start). An epic with no dates of its own borrows the stretch its issues cover, drawn dashed, until it is dragged. On a phone it is a read-only list, releases first. |
 | **Backlog** (Scrum) | The active sprint, planned sprints, then unplanned work, in rank order. Drag between them, create inline, create / edit / delete sprints, **start** (dates, goal) and **complete** (unfinished work goes to the backlog, a planned sprint, or a new one). **Quick filters** narrow every list: words, assignees' avatars, *Only my issues*, *Recently updated* (the last day), *Flagged*. The **Epics** panel (the Epics button, or press **E**; remembered per browser) lists the open epics with their progress (done epics on request), *Issues without epic* and *Create epic*: click one to filter the backlog to it, or drop a row on it to move the row there. Each row shows its epic as a chip: click it (or use the row's menu) to change the epic, open it or remove it; each epic in the panel has an icon that opens it. **Select** rows to move them together: click a row (Cmd/Ctrl-click to add or drop one, Shift-click for a range; on a touch screen tap, or use the checkboxes), then use the selection's bar (*Move to* a sprint or the backlog, *Epic*), a selected row's menu, or drag one of them: the rest follow. Esc clears the selection. |
+| **Tests** | Each project's **end-to-end test cases** as a sheet that works like Google Sheets: a key each (`WEB-T12`), a summary, description (the steps), expected result, **type** and **level** (from the project's lists), impacted areas, and the issue it was written for. Type into any cell (Enter saves and goes down, Tab goes right), type a summary in the last row to add a case, drag a row's number (or Alt+Shift+↑↓) to reorder, Cmd/Ctrl+Z to undo. **Copy and paste with Google Sheets** both ways: a block pasted over cells changes them, rows past the end become new cases, and a pasted **header row** (Summary, Steps, Expected result, Type, Level, Impacted areas, Status, Reason…) matches the columns by name, so a QA sheet comes in with one paste. **Results:** in the Status column press **P**, **F**, **B** or **S** (or the Mark buttons) to record pass, fail, blocked or skipped for every selected case, on the **environment** you pick (Local, Dev, Staging, Prod…); a fail or block asks why. Each case shows its latest result, who recorded it and when; its full history is a click away. Filter by type, level, status (or *not run*), area, issue and text, and **group by** type, level, impacted area or issue: each group has a header with its counts that folds it away, or selects its cases to mark them at once (a case with several areas is under each; a case moves only within its group). The filter and grouping are in the URL. Live as others edit. **On an issue**, its own cases, as the same sheet. **From AI tools, test reporters and CI**: QA working in a development repo with Claude Code (or any MCP or HTTP tool) read a ticket, save reviewed cases, link the Playwright tests that automate them and publish real runs, through the `qa-api` function and their own **API token** (see *QA automation* below). A **Runs** view lists each run (environment; a person's local run or the cloud's; repo, branch, commit; counts); a case shows the script that automates it (flagged once the case changes after it), and its history lists every result with its run and every change, marked *API* with the reason given. |
 | **Issues list** | Every issue you can see, filtered by project, type, status, assignee, priority, reporter, sprint, release, labels, text, resolution, created / updated / due, flagged. The filter lives in the URL; **save** it by name, for yourself or shared, and **pin** any saved filter (yours or a shared one) to the navigation, under *Issues*: one click from anywhere. Pins are your own. CSV download. |
 | **Releases** | Plan versions (a release date is required, a start date optional), track progress, release (moving unfinished work on), **archive** any release (unarchiving puts it back as released or unreleased, as it was; archiving never skips its approval) or delete it. A release's page leads with its internal **description**, then its **release notes**, rich text written for people outside the team (public one day), started from a **draft of what is done** grouped by type; copy them as text or save them as a **Google Doc**. Its issues follow. Down the right: its status and dates, its **approval**, and its **outlook**: the Summary's release judgement (progress, time gone against work done, the forecast, what is unassigned, unestimated or blocked). On a phone the status and approval come first. **Approvals**: a project's managers name approvers (anyone who can see the project). Each approves or rejects once, a rejection saying why; the decision stands until approval is asked for again. Approved by everyone, the release is **locked**: its details, notes and approvers don't change until a manager asks for approval again. A release with approvers goes out only once all of them approved. **Adding an issue to the release or taking one out asks them all again.** The releases list shows where each one's approval stands. |
 | **Summary** | Per project, what to act on rather than counts. Each widget loads by itself (only once it scrolls into view) and says so if it can't, without holding up the rest. **Next release** (most prominent): how much is done by issues and points, days left, the time gone against the work done, and a **forecast**: the team's weekly finished counts over the last eight weeks replayed 2,000 times against what is left, giving the date it is 50% and 85% likely to be done and the chance of making the release date. *On track* at 80% or more, *At risk* from 50%, *Off track* below, *Overdue* past the date; with less than three weeks of finished work it is *At risk* when more than 20 points more of its time than of its work has gone. Also what is unassigned, unestimated or blocked. **Sprint health** (Scrum): the burndown, and the pace so far carried to the end date: *On track* if nothing would be left, *At risk* if up to 15% of the starting scope would, else *Will spill ~N*; a finished sprint says what *spilled*; plus work added since it started and what the last sprint spilled. **Cycle time & throughput**: issues finished each week and the median time from first in progress to done, over 12 weeks. **Needs attention**: open work that is flagged (with its reason), blocked by an open issue, overdue, in progress longer than 85% of recent work took (two weeks until five things have finished), or in the sprint or next release with nobody on it or no estimate. **Time in status**: per status, how many sit there now, how many passed through and how long they stayed (median and total), for the sprint or a period; the slowest in-progress status is flagged as the bottleneck. **People**: per person, what they finished (issues, points), their **on-time** rate and cycle time, all time or a period. On time means done by the due date; with no due date, done within its sprint without ever spilling; issues with neither aren't judged. **Leaderboard**: this sprint (Kanban: the last 30 days), by points, then on-time rate. **Epics in progress**: progress against their dates (*Overdue*, *At risk* when time runs more than 20 points ahead of work, *On track*). **Recent activity**. Only *standard* issues count as work (epics and sub-tasks don't). Project admins **Customize** the summary for everyone: which widgets, in what order, or back to the default; the classic reports are widgets to add: **velocity** and the **sprint report** (Scrum), **created vs resolved** and **cumulative flow**. |
@@ -51,25 +52,25 @@ menu button still opens the full navigation.
 
 ## One look across the Elevance apps
 
-Work, Support and People wear the same shell, so switching between them does not feel like changing product:
+Work, Support, People and Grow wear the same shell, so switching between them does not feel like changing product:
 
 - **Header**: the app switcher, the app's logo and name on the left; your avatar with your name and role on the right, opening a menu that starts with who you are.
-- **Navigation** on the left, with the current page tinted. (Work alone, for now, also has a bar of four tabs at the foot of a phone's screen, and an Admin button in the header.) **Collapse**, at its foot, folds it to a rail of icons (hover one for its name) and expands it again. The choice is remembered and shared by the three apps, so the screen keeps its shape as you switch.
+- **Navigation** on the left, with the current page tinted. (Work alone, for now, also has a bar of four tabs at the foot of a phone's screen, and an Admin button in the header.) **Collapse**, at its foot, folds it to a rail of icons (hover one for its name) and expands it again. The choice is remembered and shared by the four apps, so the screen keeps its shape as you switch.
 - **Type and colour**: Roboto, bold page titles, the same indigo, corners, buttons and table headings.
-- **Light or dark**: **account menu → Theme** picks *Light*, *Dark* or *System* (follow the device; the default). The choice is remembered in the browser and shared by the three apps.
+- **Light or dark**: **account menu → Theme** picks *Light*, *Dark* or *System* (follow the device; the default). The choice is remembered in the browser and shared by the four apps.
 
-The look is set in `src/theme` and the shell in the layout component of each app. They are kept the same by hand: a change to one belongs in all three.
+The look is set in `src/theme` and the shell in the layout component of each app. They are kept the same by hand: a change to one belongs in all four.
 
 ## Switching between the Elevance apps
 
-The grid icon at the top left opens the **app switcher**: Work, Support and People. Picking one opens that app; the one you are in is marked *You are here*. It is not shown when an app runs installed (from its own icon): each installed app stays in its own window.
+The grid icon at the top left opens the **app switcher**: Work, Support, People and Grow. Picking one opens that app; the one you are in is marked *You are here*. It is not shown when an app runs installed (from its own icon): each installed app stays in its own window.
 
 **You are not asked to sign in again.** Each app has its own database and its own session, so the switcher is a link that carries your company email (`?sso=you@…`). An app that opens with no session hands that email to Google as a hint and skips the account chooser; Google already knows you, so you land signed in without seeing a screen. If you are not signed in to Google with that account, Google asks as usual.
 
 - The email is only a hint. Who gets in is still decided by Google and by the receiving app's own rules, so being sent to an app you have no account in ends on its login page, saying so.
 - Only an `@elevancelabs.com` address is ever sent or accepted.
 - The hint is used once and removed from the address, so a reload or a bookmark never carries it.
-- By default each app is the sibling folder beside this one (`…/elevance-work/`, `…/elevance-support/`, `…/elevance-people/`). To place one elsewhere (a custom domain, or another port in development), set `VITE_SUITE_WORK_URL`, `VITE_SUITE_SUPPORT_URL` or `VITE_SUITE_PEOPLE_URL` at build time.
+- By default each app is the sibling folder beside this one (`…/elevance-work/`, `…/elevance-support/`, `…/elevance-people/`, `…/elevance-grow/`). To place one elsewhere (a custom domain, or another port in development), set `VITE_SUITE_WORK_URL`, `VITE_SUITE_SUPPORT_URL`, `VITE_SUITE_PEOPLE_URL` or `VITE_SUITE_GROW_URL` at build time.
 
 ## Installing it as an app
 
@@ -109,8 +110,11 @@ Two layers: a **workspace role**, and a **project role** per project.
 | See the project and its issues | ✓ (all) | ✓ | ✓ | ✓ | ✓ | only if the project is **open** (then as a viewer) |
 | Comment, react to comments, watch; approve a release you're named on | ✓ | ✓ | ✓ | ✓ | ✓ | open projects only |
 | Create and edit issues (incl. their release; flag them), attach files, add docs, plan and run sprints | ✓ | ✓ | ✓ | ✓ | | |
+| Write test cases, record their results (viewers read them) | ✓ | ✓ | ✓ | ✓ | | |
+| Make your own API tokens (they act as you, with your role in each project) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Delete a test run (and its results) | ✓ | ✓ | ✓ | | | |
 | Manage releases (plan, notes, approvers, release, delete); delete issues; remove others' comments, files and docs | ✓ | ✓ | ✓ | | | |
-| Project settings, people, workflow, fields, features, Chat, the Summary's widgets | ✓ | ✓ | | | | |
+| Project settings, people, workflow, fields, features, test lists and CI tokens, Chat, the Summary's widgets | ✓ | ✓ | | | | |
 | Create and delete projects; people; issue types; workspace settings | ✓ | | | | | |
 
 - An **archived** project is read-only for everyone but workspace admins.
@@ -284,7 +288,30 @@ deliveries*, and can redeliver one. Links start from the day the webhook is
 added: earlier branches and pull requests appear the next time they change.
 Deleting a branch removes its link; pull requests and commits stay.
 
-### 6. Deploying
+### 6. QA automation (optional)
+
+QA work in each development repo with Claude Code (or any tool that speaks MCP
+or HTTP), against the `qa-api` function: read a ticket, save reviewed test
+cases, link Playwright tests to them, publish runs. Deploy it once:
+
+```bash
+supabase functions deploy qa-api --no-verify-jwt
+```
+
+It needs no secrets of its own: callers bring an **API token**, made in the
+app (account menu → *API tokens*, a person's own; project settings → *Tests*,
+a project's CI tokens). Only a hash of a token is stored, and it is shown
+once. The tools are `POST https://<ref>.supabase.co/functions/v1/qa-api/v1/<tool>`
+(JSON body) or the MCP server at `…/qa-api/mcp`; `GET …/qa-api/v1/tools`
+lists them.
+
+What QA keep in each product repo (Claude Code's `.mcp.json` pointing at
+`…/qa-api/mcp`, their skills and testing rules, and a Playwright reporter
+that posts runs through `start_run` / `record_results` / `finish_run`) lives
+in that repo, not here. A new token's dialog shows the `.mcp.json` and shell
+lines to paste.
+
+### 7. Deploying
 
 Pushes to `main` run `.github/workflows/deploy.yml`: lint, typecheck,
 browser tests, database tests, schema check, build, then deploy to GitHub
@@ -408,6 +435,32 @@ A database change is a new migration **and** the same end state in
 - **Rich text** (descriptions, comments) is sanitised when saved and again
   when shown. Tables are simple: a header row, add or delete rows and
   columns from the table button; no merged cells or column widths.
+- **Test cases** are plain text. A case's type and level must be on the
+  project's lists (**Settings → Tests**, project admins; a value taken off
+  a list stays on the cases that have it but can't be chosen again), and so
+  must a result's environment; values are matched ignoring case and spelt
+  as the list spells them, so pasting `regression` gives `Regression`. A
+  case's issue must be in the same project; deleting the issue keeps the
+  case, without it. A result is never edited: record another, or **take
+  back** your own (from the case's results, or with undo). A fail or a
+  block always has a reason. Deleting a case deletes its results. Keys
+  (`WEB-T12`) are numbered per project and never reused, ready to tag
+  automated tests with.
+- **API tokens** act as the person who made them, with their role in each
+  project (or only one project, if limited to it); a project's **CI token**
+  acts for no one, as a member of that project only. A token is shown once;
+  revoke it from the same place, and it stops at once. Expired, revoked, or
+  its owner deactivated: it stops. Tokens never reach the browser except
+  when made.
+- **Test runs** are written only by `qa-api`. A run is on one of the
+  project's environments, by a person's token (*local*, theirs) or a CI
+  token (*cloud*); its results can't be added once it is finished. A
+  failure always has a reason: the reporter's own, or its error's first
+  line. Changing a case's expected result through the API needs a reason,
+  kept in the case's history. Deleting a run (managers) deletes its
+  results; each case then shows the result it had before. A run's
+  results come from Playwright through the reporter, never from someone
+  saying so.
 - **GitHub links** are written only by the `github` function: nobody can add,
   change or remove one in the app, and only text that is a real issue key
   links anything. Whoever can see the issue sees its links.

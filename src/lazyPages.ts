@@ -13,6 +13,7 @@ export const summary = lazyPage(() => import('./pages/project/Summary'))
 export const backlog = lazyPage(() => import('./pages/project/Backlog'))
 export const board = lazyPage(() => import('./pages/project/Board'))
 export const projectIssues = lazyPage(() => import('./pages/project/ProjectIssues'))
+export const projectTests = lazyPage(() => import('./pages/project/Tests'))
 export const releases = lazyPage(() => import('./pages/project/Releases'))
 export const releaseDetail = lazyPage(() => import('./pages/project/ReleaseDetail'))
 export const timeline = lazyPage(() => import('./pages/project/Timeline'))
@@ -30,7 +31,7 @@ export const NAV_PAGES = [calendar, work, todos, notes, issues]
 
 /** Every lazy page, loaded now (tests, so nothing suspends mid-check). */
 export const preloadAllPages = () => Promise.all([
-  todos, notes, calendar, issues, work, browseIssue, projectLayout, summary, backlog, board, projectIssues,
+  todos, notes, calendar, issues, work, browseIssue, projectLayout, summary, backlog, board, projectIssues, projectTests,
   releases, releaseDetail, timeline, projectCalendar, projectDocs, projectSettings, projectNotesRedirect,
   adminLayout, people, issueTypes, workspaceSettings,
 ].map((p) => p.preload()))

@@ -42,6 +42,7 @@ jobs:
           VITE_SUITE_WORK_URL: ${{ vars.VITE_SUITE_WORK_URL }}
           VITE_SUITE_SUPPORT_URL: ${{ vars.VITE_SUITE_SUPPORT_URL }}
           VITE_SUITE_PEOPLE_URL: ${{ vars.VITE_SUITE_PEOPLE_URL }}
+          VITE_SUITE_GROW_URL: ${{ vars.VITE_SUITE_GROW_URL }}
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

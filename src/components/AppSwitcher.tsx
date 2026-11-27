@@ -3,7 +3,7 @@ import {
   Avatar, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Popover, Tooltip, Typography,
 } from '@mui/material'
 import AppsIcon from '@mui/icons-material/Apps'
-import { PeopleIcon, SupportIcon, WorkIcon } from './ElevanceIcons'
+import { GrowIcon, PeopleIcon, SupportIcon, WorkIcon } from './ElevanceIcons'
 import { COMPANY_DOMAIN } from '../lib/constants'
 import { useStandalone } from './useStandalone'
 import { suiteLinks, switchUrl, type SuiteAppId } from '../lib/suite'
@@ -12,6 +12,7 @@ const LOOK: Record<SuiteAppId, { icon: typeof AppsIcon; color: string }> = {
   work: { icon: WorkIcon, color: '#3f51b5' },
   support: { icon: SupportIcon, color: '#2563eb' },
   people: { icon: PeopleIcon, color: '#00796b' },
+  grow: { icon: GrowIcon, color: '#e65100' },
 }
 
 // A build may place an app somewhere other than the sibling folder.
@@ -19,6 +20,7 @@ const OVERRIDES = {
   work: import.meta.env.VITE_SUITE_WORK_URL as string | undefined,
   support: import.meta.env.VITE_SUITE_SUPPORT_URL as string | undefined,
   people: import.meta.env.VITE_SUITE_PEOPLE_URL as string | undefined,
+  grow: import.meta.env.VITE_SUITE_GROW_URL as string | undefined,
 }
 
 /**

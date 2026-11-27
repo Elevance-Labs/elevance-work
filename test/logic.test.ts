@@ -1,6 +1,7 @@
 // The pure rules in src/lib: reports rebuilt from history, the Summary's
 // judgements and widgets, project features, the calendar's
-// items and meetings, filters and their URL form, ranks, Google links, rich text, search, todo views.
+// items and meetings, filters and their URL form, ranks, Google links, rich text, search, todo views,
+// and test cases (spreadsheet text, cell values, their filter and groups).
 import { setupDom, reporter } from './setup'
 setupDom()
 
@@ -23,6 +24,7 @@ const { matchesWords, searchTodos, searchNotes, isShortcut, isPlainKey } = await
 const { viewSearch } = await import('../src/lib/filters')
 const todosLib = await import('../src/lib/todos')
 const backlogLib = await import('../src/lib/backlog')
+const tc = await import('../src/lib/testCases')
 type Issue = import('../src/lib/types').Issue
 type IssueEvent = import('../src/lib/types').IssueEvent
 type Sprint = import('../src/lib/types').Sprint
@@ -664,6 +666,70 @@ check('the last thing done to an issue, in words',
   check('…but not with a modifier or held down', !isPlainKey(key('e', { metaKey: true }), 'e') && !isPlainKey(key('e', { ctrlKey: true }), 'e') &&
     !isPlainKey(key('e', { altKey: true }), 'e') && !isPlainKey(key('e', { repeat: true }), 'e'))
   check('…nor typed in a field or pressed in a menu', !isPlainKey(key('e', {}, input), 'e') && !isPlainKey(key('e', {}, inMenu), 'e'))
+}
+
+// ---------------- test cases ----------------
+{
+check('spreadsheet text: tabs between cells, a line per row, quoted cells keep their tabs, breaks and quotes',
+  JSON.stringify(tc.parseTsv('a\tb\r\n"two\nlines"\t"say ""hi""\tthere"\n')) === '[["a","b"],["two\\nlines","say \\"hi\\"\\tthere"]]',
+  JSON.stringify(tc.parseTsv('a\tb\r\n"two\nlines"\t"say ""hi""\tthere"\n')))
+check('…a quote inside a plain cell is just a quote', JSON.stringify(tc.parseTsv('5" screen\tok')) === '[["5\\" screen","ok"]]')
+check('…empty cells count', JSON.stringify(tc.parseTsv('a\t\tc')) === '[["a","","c"]]')
+const grid = [['plain', 'two\nlines'], ['tab\there', 'say "hi"']]
+check('…and what the sheet copies reads back the same', JSON.stringify(tc.parseTsv(tc.toTsv(grid))) === JSON.stringify(grid))
+check('a header row is recognised by its names, whatever the order',
+  JSON.stringify(tc.headerColumns(['Test Case ID', 'Scenario', 'Steps', 'Expected Result', 'Module', 'Notes'])) ===
+  '["key","title","description","expected","areas","result"]')
+check('…but a row of data isn’t one', tc.headerColumns(['Sign up', 'Account made', 'Functional']) === null &&
+  tc.headerColumns(['Type', 'Level']) === null)
+const ctx = { types: ['Functional', 'UI'], levels: ['Smoke', 'Regression'], areas: ['Checkout'] }
+const typed = tc.parseCell('type', ' ui ', ctx)
+check('a type is spelt as the project spells it', typed.ok && typed.value.type === 'UI')
+const bad = tc.parseCell('level', 'Critical', ctx)
+check('…and one not on the list says so', !bad.ok && bad.error === '"Critical" isn\'t one of this project\'s test levels.')
+const cleared = tc.parseCell('type', '', ctx)
+check('…an empty cell clears it', cleared.ok && cleared.value.type === null)
+const noTitle = tc.parseCell('title', '   ', ctx)
+check('a summary can’t be blank', !noTitle.ok)
+check('areas: split on commas, spelt as known, each once', JSON.stringify(tc.parseAreas('checkout; Cart,  cart ,', ctx.areas)) === '["Checkout","Cart"]')
+check('statuses as people write them', tc.parseStatus('Passed') === 'pass' && tc.parseStatus('FAIL') === 'fail' && tc.parseStatus('n/a') === 'skipped' &&
+  tc.parseStatus('') === null && tc.parseStatus('maybe') === undefined)
+check('an issue by key or by number in the project', tc.parseIssueRef('web-12', 'WEB') === 'WEB-12' && tc.parseIssueRef('7', 'WEB') === 'WEB-7' &&
+  tc.parseIssueRef('', 'WEB') === null && tc.parseIssueRef('nope', 'WEB') === undefined)
+const tcase = (extra: Partial<import('../src/lib/types').TestCase>) => ({
+  id: 'x', project_id: 'p', number: 1, key: 'WEB-T1', issue_id: 'i-1', title: 'Pay by card', description: 'Open the cart', expected: '',
+  type: 'Functional', level: 'Regression', areas: ['Checkout'], rank: 1, last_status: null, last_reason: null, last_environment: null,
+  last_recorded_by: null, last_recorded_at: null, created_by: null, created_at: '', updated_at: '', updated_by: null,
+  script_repo: null, script_path: null, script_title: null, automated_at: null, ...extra,
+})
+const f = (extra: Partial<import('../src/lib/testCases').TestFilter>) => ({ ...tc.EMPTY_TEST_FILTER, ...extra })
+const key12 = () => 'WEB-12'
+check('the filter: type, level, area, status (or not run) and issue',
+  tc.matchesTestCase(tcase({}), f({ type: 'Functional', level: 'Regression', area: 'checkout', status: 'none', issue: 'WEB-12' }), key12) &&
+  !tc.matchesTestCase(tcase({ last_status: 'pass' }), f({ status: 'none' }), key12) &&
+  !tc.matchesTestCase(tcase({}), f({ issue: 'WEB-13' }), key12))
+check('…and every word searched, in any of its text', tc.matchesTestCase(tcase({}), f({ q: 'cart web-t1' }), key12) &&
+  !tc.matchesTestCase(tcase({}), f({ q: 'cart refund' }), key12))
+check('…which round-trips through the address, the issue as `for`',
+  JSON.stringify(tc.testFilterFromParams(tc.testFilterToParams(f({ q: 'pay', status: 'fail', issue: 'WEB-12' })))) ===
+  JSON.stringify(f({ q: 'pay', status: 'fail', issue: 'WEB-12' })) && tc.testFilterToParams(f({ issue: 'WEB-12' })).toString() === 'for=WEB-12')
+const cases = [
+  tcase({ id: 'a', type: 'UI', level: null, areas: ['Checkout', 'Cart'], issue_id: 'i-12' }),
+  tcase({ id: 'b', type: 'Retired', areas: [], issue_id: null }),
+  tcase({ id: 'c', type: null, areas: ['cart'], issue_id: 'i-3' }),
+  tcase({ id: 'd', type: 'Functional', areas: ['Checkout'], issue_id: 'i-12' }),
+]
+const gctx = { types: ctx.types, levels: ctx.levels,
+  issue: (id: string) => ({ 'i-12': { key: 'WEB-12', title: 'Pay' }, 'i-3': { key: 'WEB-3', title: 'Cart' } } as Record<string, { key: string; title: string }>)[id] }
+const shape = (by: import('../src/lib/testCases').TestGroupBy) =>
+  tc.groupTestCases(cases, by, gctx).map((g) => `${g.label}:${g.cases.map((c) => c.id).join('')}`).join(' | ')
+check('grouped by type: the project’s order, then values off the list, then none', shape('type') === 'Functional:d | UI:a | Retired:b | No type:c', shape('type'))
+check('grouped by area: by name, a case under each of its areas, one spelling per area', shape('area') === 'Cart:ac | Checkout:ad | No area:b', shape('area'))
+check('grouped by issue: by number, the key and title as its name', shape('issue') === 'WEB-3 Cart:c | WEB-12 Pay:ad | No issue:b', shape('issue'))
+check('…and the grouping comes from the address', tc.groupFromParams(new URLSearchParams('group=area')) === 'area' &&
+  tc.groupFromParams(new URLSearchParams('group=nonsense')) === null)
+check('counts by latest result', JSON.stringify(tc.testCounts([{ last_status: 'pass' }, { last_status: 'fail' }, { last_status: null }, { last_status: 'pass' }])) ===
+  '{"total":4,"pass":2,"fail":1,"blocked":0,"skipped":0,"none":1}')
 }
 
 done()

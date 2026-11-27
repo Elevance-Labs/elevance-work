@@ -63,13 +63,20 @@ export const PEOPLE = {
   gone: person('p-zara', 'Zara Ali', 'member', false),
 }
 
+// The project's test case lists, as project_create leaves them.
+const TEST_LISTS = {
+  test_types: ['Functional', 'UI', 'Negative', 'Edge case', 'Integration'],
+  test_levels: ['Smoke', 'Sanity', 'Regression'],
+  test_environments: ['Dev', 'QA', 'Staging'],
+}
+
 const PROJECTS: Row[] = [
   { id: 'pr-web', key: 'WEB', name: 'Website', description: 'The marketing site', kind: 'scrum', visibility: 'private',
     lead_id: 'p-sara', color: '#3f51b5', issue_counter: 6, drive_folder_id: null, archived_at: null, created_at: at('2026-09-01'),
-    disabled_features: [], summary_widgets: null },
+    disabled_features: [], summary_widgets: null, test_counter: 3, test_run_counter: 2, ...TEST_LISTS },
   { id: 'pr-ops', key: 'OPS', name: 'Operations', description: '', kind: 'kanban', visibility: 'open',
     lead_id: 'p-amna', color: '#00897b', issue_counter: 2, drive_folder_id: null, archived_at: null, created_at: at('2026-09-02'),
-    disabled_features: [], summary_widgets: null },
+    disabled_features: [], summary_widgets: null, test_counter: 0, test_run_counter: 0, ...TEST_LISTS },
 ]
 
 const MEMBERS: Row[] = [
@@ -216,6 +223,81 @@ const NOTES: Row[] = [
   note('nt-old', 'p-sara', 'Old retro', 'Went fine', { project_id: 'pr-web', archived_at: at('2026-10-12'), updated_at: at('2026-10-11') }),
 ]
 
+// WEB's test cases: two written for WEB-2 (one passed on Dev, one failed on
+// QA), one for no issue, not run yet.
+const testCase = (n: number, title: string, extra: Row = {}): Row => ({
+  id: `tc-${n}`, project_id: 'pr-web', number: n, key: `WEB-T${n}`, issue_id: null, title, description: '', expected: '', type: null,
+  level: null, areas: [], rank: n * 1024, last_status: null, last_reason: null, last_environment: null, last_recorded_by: null,
+  last_recorded_at: null, created_by: 'p-sara', created_at: at('2026-10-12'), updated_at: at('2026-10-12'), updated_by: 'p-sara',
+  script_repo: null, script_path: null, script_title: null, automated_at: null, ...extra,
+})
+
+const TEST_CASES: Row[] = [
+  testCase(1, 'Hero shows the new photo', { issue_id: 'i-web-2', description: 'Open the home page', expected: 'The new photo fills the hero',
+    type: 'Functional', level: 'Regression', areas: ['Home'], script_repo: 'elevance/site', script_path: 'e2e/home/hero.spec.ts',
+    script_title: 'shows the new photo @WEB-T1', automated_at: at('2026-10-13') }),
+  // Edited after its script was linked.
+  testCase(2, 'Hero is readable on a phone', { issue_id: 'i-web-2', type: 'UI', level: 'Smoke', areas: ['Home', 'Mobile'],
+    script_repo: 'elevance/site', script_path: 'e2e/home/hero-mobile.spec.ts', automated_at: at('2026-10-11') }),
+  testCase(3, 'Footer links open', { type: 'Functional', level: 'Regression', areas: ['Footer'] }),
+]
+
+const result = (extra: Row): Row => ({ reason: '', run_id: null, duration_ms: null, error: null, artifact_url: null, attempts: 1,
+  flaky: false, source: 'manual', ...extra })
+
+const TEST_RESULTS: Row[] = [
+  // From Sara's local run WEB-R1, on Dev.
+  result({ id: 'tr-1', case_id: 'tc-1', project_id: 'pr-web', status: 'pass', environment: 'Dev', source: 'automated', run_id: 'run-1',
+    duration_ms: 4200, attempts: 2, flaky: true, recorded_by: 'p-sara', created_at: at('2026-10-20', '09:00') }),
+  result({ id: 'tr-2', case_id: 'tc-2', project_id: 'pr-web', status: 'fail', reason: 'Text overlaps the photo', environment: 'QA',
+    recorded_by: 'p-amna', created_at: at('2026-10-20', '11:00') }),
+]
+
+// Sara's local run on Dev (finished), and a cloud run on Staging still going.
+const TEST_RUNS: Row[] = [
+  { id: 'run-1', project_id: 'pr-web', number: 1, key: 'WEB-R1', environment: 'Dev', mode: 'local', run_by: 'p-sara', repo: 'elevance/site',
+    branch: 'feature/hero', commit_sha: 'abc1234def', ci_url: null, started_at: at('2026-10-20', '08:58'), finished_at: at('2026-10-20', '09:01'),
+    total: 1, passed: 1, failed: 0, blocked: 0, skipped: 0, flaky: 1 },
+  { id: 'run-2', project_id: 'pr-web', number: 2, key: 'WEB-R2', environment: 'Staging', mode: 'cloud', run_by: null, repo: 'elevance/site',
+    branch: 'main', commit_sha: null, ci_url: 'https://github.com/elevance/site/actions/runs/7', started_at: at('2026-10-21', '06:00'),
+    finished_at: null, total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, flaky: 0 },
+]
+
+const TEST_CASE_EVENTS: Row[] = [
+  { id: 'tce-1', case_id: 'tc-1', project_id: 'pr-web', actor_id: 'p-sara', via: 'api', field: 'created', from_value: null,
+    to_value: 'Hero shows the new photo', reason: null, created_at: at('2026-10-12') },
+  { id: 'tce-2', case_id: 'tc-1', project_id: 'pr-web', actor_id: 'p-amna', via: 'api', field: 'expected', from_value: 'The photo shows',
+    to_value: 'The new photo fills the hero', reason: 'The story asks for the full width', created_at: at('2026-10-13') },
+]
+
+// Sara's own token, and WEB's CI token. The mock keeps the token itself (`_token`); the database keeps only its hash.
+const API_TOKENS: Row[] = [
+  { id: 'tok-sara', profile_id: 'p-sara', project_id: null, name: 'Sara laptop', prefix: 'elw_aaaaaaaa', _token: `elw_${'a'.repeat(64)}`,
+    scopes: ['tests:read', 'tests:write'], created_by: 'p-sara', created_at: at('2026-10-15'), expires_at: null, last_used_at: null, revoked_at: null },
+  { id: 'tok-ci', profile_id: null, project_id: 'pr-web', name: 'GitHub Actions', prefix: 'elw_cccccccc', _token: `elw_${'c'.repeat(64)}`,
+    scopes: ['tests:read', 'tests:write'], created_by: 'p-amna', created_at: at('2026-10-15'), expires_at: null, last_used_at: null, revoked_at: null },
+]
+
+/** Mirror of test_results_after_write's count of a run. */
+function runCounts(runId: unknown) {
+  const run = find('test_runs', runId)
+  if (!run) return
+  const rs = rowsIn('test_results').filter((r) => r.run_id === runId)
+  Object.assign(run, { total: rs.length, passed: rs.filter((r) => r.status === 'pass').length, failed: rs.filter((r) => r.status === 'fail').length,
+    blocked: rs.filter((r) => r.status === 'blocked').length, skipped: rs.filter((r) => r.status === 'skipped').length,
+    flaky: rs.filter((r) => r.flaky).length })
+}
+
+/** Mirror of test_results_after_write: a case shows its latest result. */
+function latestResult(caseId: unknown) {
+  const c = find('test_cases', caseId)
+  if (!c) return
+  const r = rowsIn('test_results').filter((x) => x.case_id === caseId)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+  Object.assign(c, { last_status: r?.status ?? null, last_reason: r?.reason ?? null, last_environment: r?.environment ?? null,
+    last_recorded_by: r?.recorded_by ?? null, last_recorded_at: r?.created_at ?? null })
+}
+
 const NOTIFICATIONS: Row[] = [
   { id: 'n-1', recipient_id: 'p-sara', actor_id: 'p-amna', kind: 'commented', issue_id: 'i-web-2', comment_id: 'c-1',
     detail: null, read_at: null, created_at: at('2026-10-15', '11:00') },
@@ -230,12 +312,12 @@ const rowsIn = (name: string) => (db[name] ??= [])
 const find = (table: string, id: unknown) => rowsIn(table).find((r) => r.id === id)
 let nextId = 1
 
-const me = () => authState.bound
+// The service role (an Edge Function): nobody signed in, every row readable.
+const me = () => (authState.service ? null : authState.bound)
 
 /** Mirror of role_in_project, for the project visibility the mock applies on select. */
-function roleIn(projectId: unknown) {
+function roleIn(projectId: unknown, who: Profile | null = me()) {
   const p = find('projects', projectId)
-  const who = me()
   if (!p || !who || !who.active) return null
   if (who.app_role === 'admin') return 'admin'
   const m = rowsIn('project_members').find((r) => r.project_id === projectId && r.profile_id === who.id)?.role ?? null
@@ -268,6 +350,7 @@ function withEmbeds(table: string, row: Row): Row {
 }
 
 function rowsOf(table: string): Row[] {
+  if (authState.service) return rowsIn(table)
   if (table === 'projects') return rowsIn('projects').filter((p) => roleIn(p.id) !== null)
   // Mirror of todos_select: yours, and those you're on.
   if (table === 'todos') return rowsIn('todos').filter((t) => t.owner_id === me()?.id || (t.shared_with as string[]).includes(me()?.id ?? ''))
@@ -277,6 +360,10 @@ function rowsOf(table: string): Row[] {
   // Your filters and shared ones; your own pins.
   if (table === 'saved_filters') return rowsIn(table).filter((f) => f.owner_id === me()?.id || f.shared)
   if (table === 'saved_filter_pins') return rowsIn(table).filter((p) => p.profile_id === me()?.id)
+  // api_tokens_select: yours; a project's CI tokens to its admins.
+  if (table === 'api_tokens') {
+    return rowsIn(table).filter((t) => t.profile_id === me()?.id || (!t.profile_id && roleIn(t.project_id) === 'admin'))
+  }
   return rowsIn(table)
 }
 
@@ -342,6 +429,30 @@ function insertDefaults(table: string, row: Row): Row {
         position: Math.max(-1, ...rowsIn(table).filter((f) => f.project_id === row.project_id).map((f) => Number(f.position))) + 1 }
     case 'profiles':
       return { title: null, avatar_url: null, app_role: 'member', active: true, ...row }
+    case 'test_cases': {
+      const p = find('projects', row.project_id)!
+      const number = Number(p.test_counter) + 1
+      p.test_counter = number
+      const maxRank = Math.max(0, ...rowsIn('test_cases').filter((c) => c.project_id === row.project_id).map((c) => Number(c.rank)))
+      return { issue_id: null, description: '', expected: '', type: null, level: null, areas: [], rank: maxRank + 1024, ...row,
+        number, key: `${p.key}-T${number}`, last_status: null, last_reason: null, last_environment: null, last_recorded_by: null,
+        last_recorded_at: null, updated_by: null, script_repo: null, script_path: null, script_title: null, automated_at: null,
+        created_by: me()?.id ?? row.created_by ?? null, created_at: now, updated_at: now }
+    }
+    case 'test_results': {
+      const run = find('test_runs', row.run_id)
+      return { reason: '', environment: null, run_id: null, duration_ms: null, error: null, artifact_url: null, attempts: 1, flaky: false,
+        source: 'manual', ...row, project_id: find('test_cases', row.case_id)?.project_id, recorded_by: me()?.id ?? row.recorded_by ?? null,
+        created_at: now, ...(run ? { environment: run.environment } : {}) }
+    }
+    case 'test_runs': {
+      const p = find('projects', row.project_id)!
+      const number = Number(p.test_run_counter ?? 0) + 1
+      p.test_run_counter = number
+      const env = (p.test_environments as string[]).find((e) => e.toLowerCase() === String(row.environment).toLowerCase()) ?? row.environment
+      return { repo: null, branch: null, commit_sha: null, ci_url: null, finished_at: null, ...row, number, key: `${p.key}-R${number}`,
+        environment: env, run_by: me()?.id ?? row.run_by ?? null, started_at: now, total: 0, passed: 0, failed: 0, blocked: 0, skipped: 0, flaky: 0 }
+    }
     default:
       return row
   }
@@ -435,6 +546,13 @@ export const authState = {
   session: null as Session,
   // What `bind_profile` hands back: the profile, or null to refuse.
   bound: null as Profile | null,
+  // Calls made as the service role (an Edge Function's), as asService sets.
+  service: false,
+}
+
+/** Act as an Edge Function (the service role): nobody signed in, no RLS. */
+export function asService(on = true) {
+  authState.service = on
 }
 const listeners = new Set<Listener>()
 
@@ -490,13 +608,20 @@ export function reset() {
     note_labels: copy(NOTE_LABELS),
     notes: copy(NOTES),
     notifications: copy(NOTIFICATIONS),
+    test_cases: copy(TEST_CASES),
+    test_results: copy(TEST_RESULTS),
+    test_runs: copy(TEST_RUNS),
+    test_case_events: copy(TEST_CASE_EVENTS),
+    api_tokens: copy(API_TOKENS),
   }
+  for (const c of db.test_cases) latestResult(c.id)
   for (const list of Object.values(captured)) list.length = 0
   realtime.length = 0
   failures.clear()
   Object.assign(googleCalendar, { connected: false, lapsed: false, events: [] })
   authState.session = null
   authState.bound = null
+  authState.service = false
   listeners.clear()
 }
 reset()
@@ -659,6 +784,10 @@ class Query implements PromiseLike<Result> {
       case 'insert':
         rows = input.map((r) => ({ id: `new-${nextId++}`, created_at: new Date().toISOString(), ...insertDefaults(this.name, r) }))
         rowsIn(this.name).push(...rows)
+        if (this.name === 'test_results') for (const r of rows) {
+          latestResult(r.case_id)
+          runCounts(r.run_id)
+        }
         rows = rows.map((r) => withEmbeds(this.name, structuredClone(r)))
         break
       case 'update':
@@ -688,6 +817,18 @@ class Query implements PromiseLike<Result> {
         // A list's places cascade: its todos are back in the Inbox.
         if (this.name === 'comments') db.comment_reactions = rowsIn('comment_reactions').filter((r) => !rows.some((c) => c.id === r.comment_id))
         if (this.name === 'todo_lists') db.todo_places = rowsIn('todo_places').filter((p) => !rows.some((l) => l.id === p.list_id))
+        // A case's results go with it; the case shows its latest result.
+        if (this.name === 'test_results') for (const r of rows) {
+          latestResult(r.case_id)
+          runCounts(r.run_id)
+        }
+        // A run's results go with it.
+        if (this.name === 'test_runs') {
+          const gone = rowsIn('test_results').filter((r) => rows.some((x) => x.id === r.run_id))
+          db.test_results = rowsIn('test_results').filter((r) => !gone.includes(r))
+          for (const r of gone) latestResult(r.case_id)
+        }
+        if (this.name === 'test_cases') db.test_results = rowsIn('test_results').filter((r) => !rows.some((c) => c.id === r.case_id))
         break
     }
 
@@ -748,7 +889,7 @@ const RPCS: Record<string, (args: Row) => unknown> = {
     const id = `new-${nextId++}`
     const p = { id, key: p_key, name: p_name, kind: p_kind, visibility: p_visibility, description: p_description ?? '',
       lead_id: me()?.id, color: '#3f51b5', issue_counter: 0, drive_folder_id: null, archived_at: null, created_at: new Date().toISOString(),
-      disabled_features: [], summary_widgets: null }
+      disabled_features: [], summary_widgets: null, test_counter: 0, test_run_counter: 0, ...structuredClone(TEST_LISTS) }
     rowsIn('projects').push(p)
     rowsIn('project_members').push({ project_id: id, profile_id: me()?.id, role: 'admin' })
     ;[['To Do', 'todo'], ['In Progress', 'in_progress'], ['In Review', 'in_progress'], ['Done', 'done']].forEach(([name, category], i) =>
@@ -761,6 +902,34 @@ const RPCS: Record<string, (args: Row) => unknown> = {
   },
   fields_reorder: ({ p_ids }) => {
     ;(p_ids as string[]).forEach((id, i) => Object.assign(find('fields', id) ?? {}, { position: i }))
+    return null
+  },
+  api_token_create: ({ p_name, p_project, p_ci, p_scopes, p_days }) => {
+    const token = `elw_${String(nextId++).padStart(64, '0')}`
+    const row = { id: `new-${nextId++}`, profile_id: p_ci ? null : me()?.id, project_id: p_project ?? null, name: p_name, prefix: token.slice(0, 12),
+      _token: token, scopes: p_scopes, created_by: me()?.id, created_at: new Date().toISOString(),
+      expires_at: p_days ? new Date(Date.now() + Number(p_days) * 86_400_000).toISOString() : null, last_used_at: null, revoked_at: null }
+    rowsIn('api_tokens').push(row)
+    return { id: row.id, token, prefix: row.prefix }
+  },
+  api_token_revoke: ({ p_id }) => {
+    Object.assign(find('api_tokens', p_id) ?? {}, { revoked_at: new Date().toISOString() })
+    return null
+  },
+  // As qa_token_use: the token's row while it may be used.
+  qa_token_use: ({ p_token }) => rowsIn('api_tokens')
+    .filter((t) => t._token === p_token && !t.revoked_at && (!t.expires_at || String(t.expires_at) > new Date().toISOString()))
+    .map((t) => ({ id: t.id, profile_id: t.profile_id, project_id: t.project_id, scopes: t.scopes })),
+  // As qa_role: a person's own role; a CI token a member of its project only.
+  qa_role: ({ p_token, p_project }) => {
+    const t = find('api_tokens', p_token)
+    if (!t || (t.project_id && t.project_id !== p_project)) return null
+    if (!t.profile_id) return find('projects', p_project)?.archived_at ? 'viewer' : 'member'
+    return roleIn(p_project, (find('profiles', t.profile_id) as unknown as Profile) ?? null)
+  },
+  test_cases_rerank: ({ p_project }) => {
+    rowsIn('test_cases').filter((c) => c.project_id === p_project).sort((a, b) => Number(a.rank) - Number(b.rank))
+      .forEach((c, n) => (c.rank = (n + 1) * 1024))
     return null
   },
   project_rerank: ({ p_project }) => {

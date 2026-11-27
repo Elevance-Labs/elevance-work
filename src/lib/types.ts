@@ -60,6 +60,10 @@ export interface Project {
   disabled_features: ProjectFeature[]
   /** The Summary's widgets in order (components/insights/registry); null is the kind's default. */
   summary_widgets: string[] | null
+  // Test cases: the project's own lists (Settings → Tests).
+  test_types: string[]
+  test_levels: string[]
+  test_environments: string[]
 }
 
 export interface ProjectMember {
@@ -410,4 +414,117 @@ export interface PushSubscriptionRow {
   device: string | null
   created_at: string
   last_used_at: string | null
+}
+
+export type TestStatus = 'pass' | 'fail' | 'blocked' | 'skipped'
+
+/** An end-to-end test case (WEB-T12). The last_* columns are its latest result, kept by a trigger. */
+export interface TestCase {
+  id: string
+  project_id: string
+  number: number
+  key: string
+  // The issue it was written for, if any.
+  issue_id: string | null
+  title: string
+  // Plain text: the steps.
+  description: string
+  expected: string
+  // One of the project's test_types / test_levels.
+  type: string | null
+  level: string | null
+  // Impacted areas.
+  areas: string[]
+  rank: number
+  last_status: TestStatus | null
+  last_reason: string | null
+  last_environment: string | null
+  last_recorded_by: string | null
+  last_recorded_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+  // The Playwright test that automates it (set through qa-api).
+  script_repo: string | null
+  script_path: string | null
+  script_title: string | null
+  automated_at: string | null
+}
+
+/** One run of a case: added, never changed; taken back only by whoever recorded it. */
+export interface TestResult {
+  id: string
+  case_id: string
+  project_id: string
+  status: TestStatus
+  reason: string
+  environment: string | null
+  source: 'manual' | 'automated'
+  recorded_by: string | null
+  created_at: string
+  // A run's result (null: recorded in the app), and what the run saw.
+  run_id: string | null
+  duration_ms: number | null
+  error: string | null
+  artifact_url: string | null
+  attempts: number
+  flaky: boolean
+}
+
+export type TestRunMode = 'local' | 'cloud'
+
+/** One run of a project's tests (WEB-R7), written only by the qa-api function. */
+export interface TestRun {
+  id: string
+  project_id: string
+  number: number
+  key: string
+  environment: string
+  /** Someone's run on their machine, or the cloud's. */
+  mode: TestRunMode
+  run_by: string | null
+  repo: string | null
+  branch: string | null
+  commit_sha: string | null
+  ci_url: string | null
+  started_at: string
+  finished_at: string | null
+  total: number
+  passed: number
+  failed: number
+  blocked: number
+  skipped: number
+  flaky: number
+}
+
+/** A change to a test case: made in the app, or through qa-api (with its reason). */
+export interface TestCaseEvent {
+  id: string
+  case_id: string
+  project_id: string
+  actor_id: string | null
+  via: 'app' | 'api'
+  field: string
+  from_value: string | null
+  to_value: string | null
+  reason: string | null
+  created_at: string
+}
+
+export type ApiScope = 'tests:read' | 'tests:write'
+
+/** A token for qa-api: a person's own, or a project's CI token (no person). The token itself is never readable. */
+export interface ApiToken {
+  id: string
+  profile_id: string | null
+  project_id: string | null
+  name: string
+  prefix: string
+  scopes: ApiScope[]
+  created_by: string | null
+  created_at: string
+  expires_at: string | null
+  last_used_at: string | null
+  revoked_at: string | null
 }

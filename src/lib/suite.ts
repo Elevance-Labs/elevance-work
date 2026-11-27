@@ -10,7 +10,7 @@
  * decided by Google and by the receiving app's own database.
  */
 
-export type SuiteAppId = 'work' | 'support' | 'people'
+export type SuiteAppId = 'work' | 'support' | 'people' | 'grow'
 
 export interface SuiteApp {
   id: SuiteAppId
@@ -24,6 +24,7 @@ export const SUITE_APPS: SuiteApp[] = [
   { id: 'work', name: 'Work', description: 'Projects, sprints and calendar', folder: 'elevance-work' },
   { id: 'support', name: 'Support', description: 'Customer tickets and SLAs', folder: 'elevance-support' },
   { id: 'people', name: 'People', description: 'Leave, reviews and payroll', folder: 'elevance-people' },
+  { id: 'grow', name: 'Grow', description: 'Prospects, pipeline and playbook', folder: 'elevance-grow' },
 ]
 
 export const SSO_PARAM = 'sso'

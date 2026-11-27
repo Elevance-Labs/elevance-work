@@ -1,7 +1,9 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    // The Edge Functions' pure modules import each other Deno's way (./x.ts).
+    "allowImportingTsExtensions": true
   },
   "include": ["../src", "."]
 }

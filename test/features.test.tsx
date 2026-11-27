@@ -19,7 +19,7 @@ reset()
 web().disabled_features = ['timeline', 'releases', 'docs']
 signInAs(PEOPLE.member)
 await mountApp('/projects/WEB')
-check('a feature turned off has no tab', tabs().join() === 'Summary,Backlog,Board,Calendar,Issues', tabs().join())
+check('a feature turned off has no tab', tabs().join() === 'Summary,Backlog,Board,Calendar,Issues,Tests', tabs().join())
 
 for (const path of ['/projects/WEB/releases', '/projects/WEB/releases/rl-1', '/projects/WEB/docs', '/projects/WEB/timeline']) {
   reset()
